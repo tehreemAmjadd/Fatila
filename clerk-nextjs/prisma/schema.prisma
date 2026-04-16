@@ -1,0 +1,117 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  clerkId              String?  @unique
+  plan                 String   @default("free")
+  subscriptionStatus   String   @default("inactive")
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  role                 String   @default("user") // "user" | "admin"
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  trialStartedAt  DateTime?   // jab trial shuru hua
+  trialEndsAt     DateTime?   // trial khatam hone ki date (start + 7 days)
+  trialUsed       Boolean     @default(false) // ek baar hi trial mile
+  
+  leads  Lead[]
+  tasks  Task[]
+  emailLogs EmailLog[]
+  callLogs  CallLog[]
+}
+
+model Lead {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  // Basic Info
+  company     String
+  name        String?
+  email       String?
+  phone       String?
+  website     String?
+  address     String?
+  city        String?
+  country     String?
+  industry    String?
+  companySize Int?
+
+  // AI Enrichment
+  score       Int      @default(0)
+  priority    String   @default("Low") // Low | Medium | High
+  summary     String?
+  tags        String?
+  aiInsights  String?
+
+  // Source
+  source      String?  @default("manual") // manual | google_maps | linkedin | csv
+  linkedinUrl String?
+  placeId     String?  // Google Places ID
+
+  // Status
+  status      String   @default("new") // new | contacted | qualified | converted | lost
+  saved       Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  title       String
+  description String?
+  dueDate     DateTime?
+  priority    String   @default("low") // low | medium | high
+  completed   Boolean  @default(false)
+  leadId      String?  // optional: linked to a lead
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+model EmailLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  to          String
+  subject     String
+  body        String  
+  status      String   @default("sent")
+  companyName String?
+  fromEmail   String?
+  sentAt      DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+model CallLog {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  phone       String
+  company     String?
+  contactName String?
+  status      String   @default("initiated")
+  notes       String?
+  calledAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+model SearchCache {
+  id        String   @id @default(cuid())
+  cacheKey  String   @unique
+  leadsJson String   
+  location  String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
