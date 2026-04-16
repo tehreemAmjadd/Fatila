@@ -1,8 +1,7 @@
 // app/billing/page.tsx
-// Updated: Shows 7-day free trial offer + expired trial banner
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useUser } from "@clerk/nextjs";
 import { useSearchParams } from "next/navigation";
 import {
@@ -23,7 +22,6 @@ const NAV = [
   { href:"/meta-ads",     label:"Meta Ads",     Icon:Megaphone },
 ];
 
-// ── Trial features ────────────────────────────────────────────────────────────
 const TRIAL_FEATURES = [
   { label:"50 leads total",              ok:true },
   { label:"AI Lead Scoring (0-100)",     ok:true },
@@ -37,7 +35,6 @@ const TRIAL_FEATURES = [
   { label:"Email Center",                ok:false },
 ];
 
-// ── Paid plans ────────────────────────────────────────────────────────────────
 const PLANS = [
   {
     name:"Starter", targetUsers:"Freelancers & Solo Sellers",
@@ -92,7 +89,8 @@ const PLANS = [
   },
 ];
 
-export default function BillingPage() {
+// ── Main billing content (uses useSearchParams — must be inside Suspense) ──
+function BillingContent() {
   const { user } = useUser();
   const searchParams = useSearchParams();
   const canvasRef   = useRef<HTMLCanvasElement | null>(null);
@@ -107,14 +105,12 @@ export default function BillingPage() {
   const userId  = user?.id;
   const expired = searchParams.get("reason") === "trial_expired";
 
-  // ── Fetch user ────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!email) return;
     fetch("/api/get-user", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) })
       .then(r => r.json()).then(setDbUser).catch(console.error);
   }, [email]);
 
-  // ── Canvas ────────────────────────────────────────────────────────────────
   useEffect(() => {
     const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
@@ -139,7 +135,6 @@ export default function BillingPage() {
     document.addEventListener("click", h); return () => document.removeEventListener("click", h);
   }, [sidebarActive]);
 
-  // ── Start trial ───────────────────────────────────────────────────────────
   const startTrial = async () => {
     if (!email) return;
     setTrialLoading(true);
@@ -148,7 +143,6 @@ export default function BillingPage() {
       const data = await res.json();
       if (data.success) {
         setTrialSuccess(true);
-        // Redirect to dashboard after 2s
         setTimeout(() => window.location.href = "/dashboard", 2000);
       } else {
         alert(data.error || "Could not start trial");
@@ -157,7 +151,6 @@ export default function BillingPage() {
     finally { setTrialLoading(false); }
   };
 
-  // ── Checkout ──────────────────────────────────────────────────────────────
   const handleCheckout = async (priceId: string, plan: string) => {
     if (!email || !userId) { alert("User not loaded"); return; }
     const res  = await fetch("/api/checkout", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ priceId, plan, userEmail:email, userId }) });
@@ -176,7 +169,6 @@ export default function BillingPage() {
       <div className="fixed inset-0 bg-gradient-to-br from-[#020817] via-[#04102b] to-[#02060f] z-[-20]" />
       <canvas ref={canvasRef} style={{position:"fixed",top:0,left:0,width:"100vw",height:"100vh",zIndex:-10,pointerEvents:"none"}} />
 
-      {/* Sidebar */}
       <div id="sidebar" className={`sidebar ${sidebarActive?"active":""}`}>
         <div className="sb-logo"><div className="logo-dot"/><span>Fatila</span></div>
         <nav>
@@ -193,7 +185,6 @@ export default function BillingPage() {
 
       <div className="main">
 
-        {/* ── EXPIRED TRIAL BANNER ── */}
         {(expired || effectivePlan === "expired") && (
           <div className="expired-banner">
             <AlertTriangle size={18} color="#ff6b6b"/>
@@ -204,7 +195,6 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* ── ACTIVE TRIAL BANNER ── */}
         {isOnTrial && (
           <div className="trial-active-banner">
             <Clock size={16} color="#ffd700"/>
@@ -214,7 +204,6 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* Header */}
         <div className="billing-header">
           <h2>Simple, Transparent Pricing</h2>
           <p className="billing-sub">No hidden fees. Cancel anytime.</p>
@@ -226,7 +215,6 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* ── FREE TRIAL CARD ── */}
         {(canStartTrial || trialSuccess) && !isPaid && !isOnTrial && (
           <div className="trial-card">
             <div className="trial-left">
@@ -236,10 +224,7 @@ export default function BillingPage() {
               <div className="trial-features">
                 {TRIAL_FEATURES.map((f,i)=>(
                   <span key={i} className={`trial-feat ${f.ok?"yes":"no"}`}>
-                    {f.ok
-                      ? <CheckSquare size={12} color="#00ff99"/>
-                      : <Lock size={12} color="#4a5568"/>
-                    }
+                    {f.ok ? <CheckSquare size={12} color="#00ff99"/> : <Lock size={12} color="#4a5568"/>}
                     {f.label}
                   </span>
                 ))}
@@ -268,7 +253,6 @@ export default function BillingPage() {
           </div>
         )}
 
-        {/* ── PLAN CARDS ── */}
         <div className="plans-grid">
           {PLANS.map((p) => {
             const usd = billingCycle==="monthly" ? p.monthlyUSD : p.yearlyUSD;
@@ -287,10 +271,7 @@ export default function BillingPage() {
                 <ul className="feat-list">
                   {p.features.map((f,i)=>(
                     <li key={i} className={f.ok?"feat-yes":"feat-no"}>
-                      {f.ok
-                        ? <CheckSquare size={12} color="#00ff99"/>
-                        : <Lock size={12} color="#4a5568"/>
-                      }
+                      {f.ok ? <CheckSquare size={12} color="#00ff99"/> : <Lock size={12} color="#4a5568"/>}
                       {f.text}
                     </li>
                   ))}
@@ -306,19 +287,17 @@ export default function BillingPage() {
           })}
         </div>
 
-        {/* Cost note */}
         <div className="cost-note">
           <Zap size={14} color="#00ff99"/>
           Pricing covers real API costs (OpenAI + Google Places). At 50 users our API spend is ~$14/mo — plans are priced to be sustainable for both sides.
         </div>
 
-        {/* FAQ */}
         <div className="faq-grid">
           {[
-            {q:"Is the trial really free?",        a:"Yes — no credit card needed. Just sign up and click Start Trial."},
-            {q:"What happens after 7 days?",        a:"You'll be redirected to this page to pick a plan. Your data stays safe."},
-            {q:"Can I get a second trial?",         a:"No — one trial per account. This keeps the system fair for everyone."},
-            {q:"Can I cancel anytime?",             a:"Yes — cancel from your dashboard, effective immediately."},
+            {q:"Is the trial really free?",   a:"Yes — no credit card needed. Just sign up and click Start Trial."},
+            {q:"What happens after 7 days?",  a:"You'll be redirected to this page to pick a plan. Your data stays safe."},
+            {q:"Can I get a second trial?",   a:"No — one trial per account. This keeps the system fair for everyone."},
+            {q:"Can I cancel anytime?",       a:"Yes — cancel from your dashboard, effective immediately."},
           ].map((item,i)=>(
             <div key={i} className="faq-card">
               <p className="faq-q">{item.q}</p>
@@ -331,8 +310,6 @@ export default function BillingPage() {
       <style jsx>{`
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;}
         body{color:white;overflow-x:hidden;}
-
-        /* Sidebar */
         .sidebar{position:fixed;left:0;top:0;width:240px;height:100%;background:#06102a;padding:22px 14px;transition:.3s;z-index:1000;border-right:1px solid rgba(0,255,153,.07);display:flex;flex-direction:column;}
         .sb-logo{display:flex;align-items:center;gap:9px;margin-bottom:24px;padding:0 4px;color:#00ff99;font-size:17px;font-weight:700;}
         .logo-dot{width:8px;height:8px;border-radius:50%;background:#00ff99;box-shadow:0 0 8px #00ff99;}
@@ -340,19 +317,13 @@ export default function BillingPage() {
         nav a{display:flex;align-items:center;gap:9px;color:#8899bb;text-decoration:none;font-size:13px;padding:9px 10px;border-radius:8px;transition:.2s;}
         nav a:hover,nav a.active{color:#00ff99;background:rgba(0,255,153,.08);}
         .menu-btn{display:none;position:fixed;top:15px;left:15px;z-index:1100;background:#06102a;border:1px solid rgba(0,255,153,.15);color:white;padding:8px 10px;border-radius:8px;cursor:pointer;}
-
-        /* Main */
         .main{margin-left:240px;padding:24px 28px;min-height:100vh;}
-
-        /* Banners */
         .expired-banner{display:flex;align-items:flex-start;gap:12px;background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.25);border-radius:12px;padding:16px 20px;margin-bottom:20px;}
         .exp-title{font-size:14px;font-weight:600;color:#ff6b6b;margin-bottom:3px;}
         .exp-sub{font-size:13px;color:#8899bb;}
         .trial-active-banner{display:flex;align-items:center;gap:8px;background:rgba(255,215,0,.07);border:1px solid rgba(255,215,0,.2);border-radius:10px;padding:12px 18px;margin-bottom:20px;font-size:13px;color:#ccc;}
         .trial-active-banner strong{color:#ffd700;}
         .sep{color:#8899bb;margin:0 4px;}
-
-        /* Header */
         .billing-header{text-align:center;margin-bottom:32px;}
         .billing-header h2{color:#00ff99;font-size:26px;margin-bottom:8px;}
         .billing-sub{color:#8899bb;font-size:14px;margin-bottom:20px;}
@@ -361,9 +332,7 @@ export default function BillingPage() {
         .cycle-btn.active{background:#00ff99;color:#081633;font-weight:700;}
         .save-tag{background:rgba(0,255,153,.15);color:#00ff99;font-size:10px;padding:2px 7px;border-radius:20px;}
         .cycle-btn.active .save-tag{background:rgba(8,22,51,.25);color:#081633;}
-
-        /* Trial Card */
-        .trial-card{display:flex;gap:0;background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.2);border-radius:16px;padding:28px 32px;margin-bottom:28px;gap:40px;align-items:center;}
+        .trial-card{display:flex;gap:40px;background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.2);border-radius:16px;padding:28px 32px;margin-bottom:28px;align-items:center;}
         .trial-left{flex:1;}
         .trial-badge{display:inline-flex;align-items:center;gap:6px;background:#00ff99;color:#020817;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px;}
         .trial-left h3{font-size:20px;font-weight:600;margin-bottom:8px;}
@@ -383,8 +352,6 @@ export default function BillingPage() {
         .trial-success{display:flex;flex-direction:column;align-items:center;gap:8px;color:#00ff99;}
         .trial-success p{font-size:15px;font-weight:600;}
         .success-sub{font-size:12px;color:#8899bb!important;font-weight:400!important;}
-
-        /* Plans Grid */
         .plans-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:24px;}
         .plan-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:26px 22px;position:relative;display:flex;flex-direction:column;transition:.3s;}
         .plan-card:hover{background:rgba(0,255,153,.06);transform:translateY(-3px);border-color:rgba(0,255,153,.2);}
@@ -401,25 +368,17 @@ export default function BillingPage() {
         .feat-list li{display:flex;align-items:center;gap:8px;font-size:13px;}
         .feat-yes{color:#ccc;}
         .feat-no{color:#4a5568;}
-        .plan-btn{padding:12px;border:none;border-radius:28px;background:rgba(0,255,153,.1);color:#00ff99;font-weight:700;font-size:13px;cursor:pointer;transition:.2s;border:1px solid rgba(0,255,153,.25);}
+        .plan-btn{padding:12px;border-radius:28px;background:rgba(0,255,153,.1);color:#00ff99;font-weight:700;font-size:13px;cursor:pointer;transition:.2s;border:1px solid rgba(0,255,153,.25);}
         .plan-btn:hover{background:rgba(0,255,153,.2);}
         .btn-pop{background:#00ff99;color:#020817;border-color:#00ff99;}
         .btn-pop:hover{background:#00cc66;}
-
-        /* Cost note */
         .cost-note{display:flex;align-items:flex-start;gap:9px;background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.1);border-radius:10px;padding:13px 16px;font-size:13px;color:#8899bb;margin-bottom:24px;}
-
-        /* FAQ */
         .faq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:40px;}
         .faq-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:16px;}
         .faq-q{font-size:13px;color:#fff;font-weight:600;margin-bottom:6px;}
         .faq-a{font-size:12px;color:#8899bb;line-height:1.5;}
-
-        /* Spinner */
         .spinner{width:16px;height:16px;border:2px solid rgba(2,8,23,.3);border-top-color:#020817;border-radius:50%;animation:spin .6s linear infinite;}
         @keyframes spin{to{transform:rotate(360deg)}}
-
-        /* Responsive */
         @media(max-width:900px){
           .menu-btn{display:flex;}.sidebar{left:-240px;}.sidebar.active{left:0;}
           .main{margin-left:0;padding:16px;}
@@ -431,5 +390,14 @@ export default function BillingPage() {
         @media(max-width:500px){.faq-grid{grid-template-columns:1fr;}}
       `}</style>
     </>
+  );
+}
+
+// ── Default export wrapped in Suspense ────────────────────────────────────────
+export default function BillingPage() {
+  return (
+    <Suspense fallback={<div style={{color:"#00ff99",display:"flex",alignItems:"center",justifyContent:"center",height:"100vh"}}>Loading...</div>}>
+      <BillingContent />
+    </Suspense>
   );
 }
