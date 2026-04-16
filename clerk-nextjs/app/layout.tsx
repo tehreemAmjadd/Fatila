@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: 'LeadVision AI',
+  title: 'Fatila AI',
   description: 'AI Powered Lead Intelligence Platform',
 }
 
