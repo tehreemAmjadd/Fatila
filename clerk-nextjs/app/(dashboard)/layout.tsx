@@ -118,12 +118,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="fixed inset-0 bg-gradient-to-br from-[#020817] via-[#04102b] to-[#02060f] z-[-20]" />
       <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", zIndex:-10, pointerEvents:"none" }} />
 
+      {/* Mobile top navbar — only visible on small screens */}
+      <div className="mobile-topbar">
+        <button
+          className="hamburger-btn"
+          onClick={(e) => { e.stopPropagation(); setSidebarActive(p => !p); }}
+        >
+          <Menu size={20} />
+        </button>
+        <div className="mobile-logo">
+          <div className="logo-dot-sm" />
+          <span>Fatila</span>
+        </div>
+      </div>
+
+      {/* Overlay — tap to close sidebar */}
+      {sidebarActive && (
+        <div className="sidebar-overlay" onClick={() => setSidebarActive(false)} />
+      )}
+
       {/* Sidebar */}
       <div id="sidebar" className={`sidebar ${sidebarActive ? "active" : ""}`}>
         <div className="sb-logo">
           <div className="logo-dot" />
           <span>Fatila</span>
-          {/* Close button inside sidebar — only visible on mobile */}
           <button className="sb-close-btn" onClick={() => setSidebarActive(false)}>
             <X size={18} />
           </button>
@@ -141,22 +159,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {/* Mobile menu button */}
-      <button
-        className="menu-btn"
-        onClick={(e) => { e.stopPropagation(); setSidebarActive(p => !p); }}
-      >
-        <Menu size={20} />
-      </button>
-
-      {/* Mobile overlay — closes sidebar on tap outside */}
-      {sidebarActive && (
-        <div
-          className="sidebar-overlay"
-          onClick={() => setSidebarActive(false)}
-        />
-      )}
-
       {/* Page content */}
       <div className="page-wrapper">
         {children}
@@ -165,6 +167,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <style jsx global>{`
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;}
         body{color:white;overflow-x:hidden;}
+
+        /* ── Mobile topbar — hidden on desktop ── */
+        .mobile-topbar{display:none;}
 
         /* ── Sidebar ── */
         .sidebar{
@@ -186,80 +191,62 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .sb-upgrade{font-size:11px;color:#00ff99;text-decoration:none;background:rgba(0,255,153,.1);padding:4px 10px;border-radius:20px;border:1px solid rgba(0,255,153,.2);}
         .sb-upgrade:hover{background:rgba(0,255,153,.2);}
 
-        /* ── Mobile menu button ── */
-        .menu-btn{
-          display:none;
-          position:fixed;
-          top:14px;left:14px;
-          z-index:1200;
-          background:#06102a;
-          border:1px solid rgba(0,255,153,.2);
-          color:white;
-          padding:8px 10px;
-          border-radius:8px;
-          cursor:pointer;
-          align-items:center;
-          justify-content:center;
-          transition:.2s;
-        }
-
-        /* ── Close button inside sidebar header ── */
-        .sb-close-btn{
-          display:none;
-          margin-left:auto;
-          background:none;
-          border:none;
-          color:#8899bb;
-          cursor:pointer;
-          padding:4px;
-          border-radius:6px;
-          align-items:center;
-          justify-content:center;
-          transition:.2s;
-          flex-shrink:0;
-        }
+        /* Close btn inside sidebar — desktop mein hidden */
+        .sb-close-btn{display:none;margin-left:auto;background:none;border:none;color:#8899bb;cursor:pointer;padding:4px;border-radius:6px;transition:.2s;flex-shrink:0;}
         .sb-close-btn:hover{color:white;background:rgba(255,255,255,.08);}
 
-        /* ── Dark overlay behind sidebar on mobile ── */
+        /* ── Overlay ── */
         .sidebar-overlay{
-          display:none;
-          position:fixed;
-          inset:0;
+          position:fixed;inset:0;
           background:rgba(0,0,0,.6);
-          z-index:999;
+          z-index:998;
           backdrop-filter:blur(2px);
         }
 
-        /* ── Page wrapper — sits to the right of sidebar on desktop ── */
-        .page-wrapper{
-          margin-left:240px;
-          min-height:100vh;
-          position:relative;
-          z-index:1;
-        }
-
-        /* ── Desktop: keep .main styles working inside page-wrapper ── */
+        /* ── Page wrapper ── */
+        .page-wrapper{margin-left:240px;min-height:100vh;position:relative;z-index:1;}
         .main{padding:24px 28px;min-height:100vh;}
 
         /* ── Mobile ── */
         @media(max-width:900px){
-          .menu-btn{display:flex;}
+          /* Top navbar bar */
+          .mobile-topbar{
+            display:flex;
+            align-items:center;
+            gap:12px;
+            position:fixed;
+            top:0;left:0;right:0;
+            height:52px;
+            background:#06102a;
+            border-bottom:1px solid rgba(0,255,153,.08);
+            padding:0 16px;
+            z-index:1100;
+          }
+          .hamburger-btn{
+            background:none;
+            border:1px solid rgba(0,255,153,.15);
+            color:white;
+            padding:6px 8px;
+            border-radius:7px;
+            cursor:pointer;
+            display:flex;align-items:center;justify-content:center;
+            flex-shrink:0;
+          }
+          .mobile-logo{display:flex;align-items:center;gap:7px;color:#00ff99;font-size:15px;font-weight:700;}
+          .logo-dot-sm{width:7px;height:7px;border-radius:50%;background:#00ff99;box-shadow:0 0 6px #00ff99;}
+
+          /* Sidebar */
+          .sidebar{left:-260px;top:0;z-index:1000;}
+          .sidebar.active{left:0;box-shadow:6px 0 28px rgba(0,0,0,.6);}
           .sb-close-btn{display:flex;}
 
-          /* Sidebar hidden off-screen left by default */
-          .sidebar{left:-260px;}
-          .sidebar.active{left:0;box-shadow:4px 0 24px rgba(0,0,0,.5);}
-
-          /* Overlay visible only when sidebar is open */
-          .sidebar-overlay{display:block;}
-
-          /* Content takes full width, push down for menu button */
-          .page-wrapper{margin-left:0;width:100%;}
-          .main{padding:60px 14px 20px;margin-left:0;}
+          /* Content */
+          .page-wrapper{margin-left:0;width:100%;padding-top:52px;}
+          .main{padding:20px 14px;margin-left:0;}
         }
 
         @media(max-width:600px){
-          .main{padding:56px 10px 16px;}
+          .main{padding:16px 10px;}
         }
       `}</style>
     </>
