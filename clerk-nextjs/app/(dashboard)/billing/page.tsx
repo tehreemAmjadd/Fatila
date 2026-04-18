@@ -219,7 +219,7 @@ function BillingContent() {
                 <div className="plan-price">
                   <span className="price-usd">${usd}</span>
                   <span className="price-mo">/mo</span>
-                  <span className="price-pkr">{pkr} PKR</span>
+                  {/* <span className="price-pkr">{pkr} PKR</span> */}
                   {billingCycle==="yearly" && <span className="billed-ann">billed annually</span>}
                 </div>
                 <ul className="feat-list">
