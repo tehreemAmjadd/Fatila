@@ -161,6 +161,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Page content */}
       <div className="page-wrapper">
+        {/* Mobile topbar spacer — only takes space on mobile */}
+        <div className="topbar-spacer" />
         {children}
       </div>
 
@@ -170,6 +172,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         /* ── Mobile topbar — hidden on desktop ── */
         .mobile-topbar{display:none;}
+        /* Spacer hidden on desktop (sidebar handles layout) */
+        .topbar-spacer{display:none;}
 
         /* ── Sidebar ── */
         .sidebar{
@@ -209,6 +213,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         /* ── Mobile ── */
         @media(max-width:900px){
+          .topbar-spacer{display:block;}
           /* Top navbar bar */
           .mobile-topbar{
             display:flex;
@@ -241,12 +246,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .sb-close-btn{display:flex;}
 
           /* Content */
-          .page-wrapper{margin-left:0;width:100%;padding-top:52px;}
-          .main{padding:20px 14px;margin-left:0;}
+          .page-wrapper{margin-left:0;width:100%;}
+          .main{padding:16px 14px;margin-left:0;}
+          /* Spacer pushes content below the 52px fixed topbar */
+          .topbar-spacer{height:52px;flex-shrink:0;}
         }
 
         @media(max-width:600px){
-          .main{padding:16px 10px;}
+          .main{padding:12px 10px;}
+          .topbar-spacer{height:52px;}
         }
       `}</style>
     </>
