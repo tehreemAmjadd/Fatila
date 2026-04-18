@@ -1,0 +1,17 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma" // <-- add this
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                 String   @id @default(cuid())
+  email              String   @unique
+  plan               String?
+  subscriptionStatus String?
+  createdAt          DateTime @default(now())
+}
