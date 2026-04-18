@@ -73,12 +73,13 @@ export default function LeadSearchPage() {
   }, [email]);
 
   // ── Derived plan info ─────────────────────────────────────────────────────
+  const isAdmin       = dbUser?.role === "admin";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey) || "free");
-  const planCfg       = PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free;
-  const canSearch     = effectivePlan !== "free" && effectivePlan !== "expired";
+  const planCfg       = isAdmin ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
+  const canSearch     = isAdmin || (effectivePlan !== "free" && effectivePlan !== "expired");
   const leadsUsed     = dbUser?.totalLeads ?? 0;
   const leadsMax      = planCfg.leadsMax;
-  const atLimit       = leadsMax !== Infinity && leadsUsed >= leadsMax;
+  const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
   // ── Search ────────────────────────────────────────────────────────────────
   const handleSearch = async () => {
