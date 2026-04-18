@@ -66,21 +66,21 @@ export async function POST(req: NextRequest) {
 
     // ─── Column definitions ─────────────────────────────────────────────────
     // Each entry: [Header Label, getValue(lead) => string]
+    // NOTE: AI Summary removed — causes cell merging issues in spreadsheets
     const columns: [string, (lead: any) => string][] = [
-      ["Company",       l => get(l, "company", "name")],
-      ["Industry",      l => get(l, "industry", "tags")],
-      ["Phone",         l => get(l, "phone")],
-      ["Email",         l => get(l, "email")],
-      ["Website",       l => get(l, "website")],
-      ["Address",       l => get(l, "address")],
-      ["Score",         l => get(l, "score")],
-      ["Priority",      l => get(l, "priority")],
-      ["Status",        l => get(l, "status")],
-      ["AI Summary",    l => get(l, "aiInsights", "summary")],
-      ["Tags",          l => get(l, "tags", "industry")],
-      ["LinkedIn",      l => get(l, "linkedinUrl")],
-      ["Source",        l => get(l, "source")],
-      ["Date Added",    l => formatDate(l.createdAt)],
+      ["Company",    l => get(l, "company", "name")],
+      ["Industry",   l => get(l, "industry", "tags")],
+      ["Phone",      l => get(l, "phone")],
+      ["Email",      l => get(l, "email")],
+      ["Website",    l => get(l, "website")],
+      ["Address",    l => get(l, "address")],
+      ["Score",      l => get(l, "score")],
+      ["Priority",   l => get(l, "priority")],
+      ["Status",     l => get(l, "status")],
+      ["Tags",       l => get(l, "tags", "industry")],
+      ["LinkedIn",   l => get(l, "linkedinUrl")],
+      ["Source",     l => get(l, "source")],
+      ["Date Added", l => formatDate(l.createdAt)],
     ];
 
     const headers = columns.map(([h]) => h);
@@ -88,12 +88,13 @@ export async function POST(req: NextRequest) {
 
     // ─── CSV ────────────────────────────────────────────────────────────────
     if (format === "csv") {
-      const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+      const sanitizeCsv = (v: string) => v.replace(/[\r\n\t]+/g, " ").trim();
+      const escape = (v: string) => `"${sanitizeCsv(v).replace(/"/g, '""')}"`;
       const lines = [
         headers.map(escape).join(","),
         ...rows.map((row: string[]) => row.map(escape).join(",")),
       ];
-      return new NextResponse(lines.join("\n"), {
+      return new NextResponse(lines.join("\r\n"), {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": `attachment; filename="saved-leads-${Date.now()}.csv"`,
@@ -101,17 +102,19 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ─── Excel (TSV with BOM) ───────────────────────────────────────────────
+    // ─── Excel (CSV with BOM — opens correctly in Excel/WPS with proper columns) ──
     if (format === "excel") {
-      const bom  = "\uFEFF";
+      const bom      = "\uFEFF";
+      const sanitize = (v: string) => v.replace(/[\r\n\t]+/g, " ").trim();
+const escape   = (v: string) => `"${sanitize(v).replace(/"/g, '""')}"`;
       const lines = [
-        headers.join("\t"),
-        ...rows.map((row: any[]) => row.map(v => v.replace(/\t|\n|\r/g, " ")).join("\t")),
+        headers.map(escape).join(","),
+        ...rows.map((row: string[]) => row.map(escape).join(",")),
       ];
-      return new NextResponse(bom + lines.join("\n"), {
+      return new NextResponse(bom + lines.join("\r\n"), {
         headers: {
-          "Content-Type": "application/vnd.ms-excel; charset=utf-8",
-          "Content-Disposition": `attachment; filename="saved-leads-${Date.now()}.xls"`,
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="saved-leads-${Date.now()}.csv"`,
         },
       });
     }
@@ -128,7 +131,6 @@ export async function POST(req: NextRequest) {
         score:      Number(lead.score) || 0,
         priority:   get(lead, "priority"),
         status:     get(lead, "status"),
-        aiSummary:  get(lead, "aiInsights", "summary"),
         tags:       get(lead, "tags", "industry"),
         linkedin:   get(lead, "linkedinUrl"),
         source:     get(lead, "source"),
@@ -161,7 +163,6 @@ export async function POST(req: NextRequest) {
             <td style="color:${pColor}; font-weight:bold">${priority}</td>
             <td style="text-align:center; font-weight:bold">${get(lead, "score")}</td>
             <td>${linkedin ? `<a href="${linkedin}">LinkedIn →</a>` : "—"}</td>
-            <td style="font-size:10px; color:#555">${get(lead, "aiInsights", "summary") || "—"}</td>
             <td>${formatDate(lead.createdAt)}</td>
           </tr>`;
       }).join("");
@@ -194,7 +195,7 @@ export async function POST(req: NextRequest) {
 <body>
   <div class="header">
     <div>
-      <h1>🎯 LeadVision AI — Saved Leads</h1>
+      <h1>🎯 Fatila AI — Saved Leads</h1>
       <p>Exported by ${email} · ${leads.length} leads</p>
     </div>
     <div class="meta">
@@ -214,12 +215,11 @@ export async function POST(req: NextRequest) {
         <th>Priority</th>
         <th>Score</th>
         <th>LinkedIn</th>
-        <th>AI Summary</th>
         <th>Date</th>
       </tr>
     </thead>
     <tbody>
-      ${tableRows || `<tr><td colspan="10" style="text-align:center; padding:30px; color:#999">No saved leads found</td></tr>`}
+      ${tableRows || `<tr><td colspan="9" style="text-align:center; padding:30px; color:#999">No saved leads found</td></tr>`}
     </tbody>
   </table>
 

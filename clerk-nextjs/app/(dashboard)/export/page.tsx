@@ -5,7 +5,7 @@ import { useUser } from "@clerk/nextjs";
 import {
   Download, FileText, FileSpreadsheet, Printer,
   Code2, Lock, Filter, Globe, Star, Check, ArrowRight,
-  AlertTriangle, RefreshCw, Bot as BotIcon,Bookmark,Search
+  AlertTriangle, RefreshCw, Bookmark, Search
 } from "lucide-react";
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ const FORMAT_INFO = [
     id:"excel",
     Icon:FileSpreadsheet,
     label:"Excel",
-    desc:"Opens directly in Microsoft Excel (.xls format)",
+    desc:"Opens directly in Microsoft Excel / WPS (.csv with BOM)",
     color:"#3b9eff",
   },
   {
@@ -58,7 +58,7 @@ const PRIORITY_COLOR: Record<string,string> = { High:"#ff4d4d", Medium:"#ffd700"
 const EXPORTED_FIELDS = [
   "Company Name","Industry","Phone Number",
   "Email Address","Website","Address",
-  "Lead Score","Priority","Status","AI Insights","LinkedIn URL",
+  "Lead Score","Priority","Status","Tags","LinkedIn URL","Source","Date Added",
 ];
 
 export default function ExportPage() {
@@ -129,7 +129,7 @@ export default function ExportPage() {
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement("a");
         a.href = url;
-        a.download = `saved-leads-${new Date().toISOString().split("T")[0]}.${format==="excel"?"xls":format}`;
+        a.download = `saved-leads-${new Date().toISOString().split("T")[0]}.${format==="json"?"json":format==="excel"?"csv":"csv"}`;
         document.body.appendChild(a); a.click();
         document.body.removeChild(a); URL.revokeObjectURL(url);
       }
@@ -350,11 +350,7 @@ export default function ExportPage() {
                                   <Globe size={10}/>{get(lead,"website")!.replace(/https?:\/\//,"").split("/")[0]}
                                 </span>
                               )}
-                              {get(lead,"aiInsights","summary")&&(
-                                <span className="preview-ai">
-                                  <BotIcon size={10}/>{get(lead,"aiInsights","summary")!.slice(0,80)}...
-                                </span>
-                              )}
+
                             </div>
                             <div className="preview-score">
                               <span className="score-val" style={{color:pColor}}>
@@ -476,7 +472,6 @@ export default function ExportPage() {
         .preview-company{font-size:13px;font-weight:600;}
         .preview-meta{font-size:11px;color:#8899bb;}
         .preview-website{display:flex;align-items:center;gap:4px;font-size:11px;color:#00ff99;}
-        .preview-ai{display:flex;align-items:flex-start;gap:4px;font-size:11px;color:#8899bb;font-style:italic;line-height:1.4;}
         .preview-score{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
         .score-val{display:flex;align-items:center;gap:3px;font-weight:700;font-size:13px;}
         .preview-priority{font-size:10px;font-weight:700;text-transform:uppercase;}

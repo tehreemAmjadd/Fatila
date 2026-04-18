@@ -448,20 +448,20 @@ export default function LeadSearchPage() {
 
         .no-results{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px;color:#8899bb;font-size:14px;}
 
-        .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;align-items:start;}
+        .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;align-items:start;grid-auto-rows:auto;}
 
         /* Lead Card */
-        .lead-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;transition:.2s;}
+        .lead-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px;transition:.2s;height:fit-content;}
         .lead-card:hover{border-color:rgba(0,255,153,.2);background:rgba(0,255,153,.03);}
         .lead-card.saved{border-color:rgba(0,255,153,.3);background:rgba(0,255,153,.04);}
 
         .card-top{display:flex;align-items:flex-start;gap:12px;}
-        .company-avatar{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#00ff99,#004d33);color:#020817;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+        .company-avatar{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#00ff99,#004d33);color:#020817;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
         .company-info{flex:1;min-width:0;}
-        .company-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .company-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .industry-tag{font-size:11px;background:rgba(255,255,255,.07);color:#8899bb;padding:2px 8px;border-radius:8px;display:inline-block;margin-top:3px;}
         .score-wrap{text-align:center;flex-shrink:0;}
-        .score-circle{width:38px;height:38px;border-radius:50%;background:rgba(0,255,153,.1);border:1px solid rgba(0,255,153,.25);color:#00ff99;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+        .score-circle{width:36px;height:36px;border-radius:50%;background:rgba(0,255,153,.1);border:1px solid rgba(0,255,153,.25);color:#00ff99;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;}
         .score-lbl{font-size:10px;color:#8899bb;margin-top:2px;display:block;}
 
         .priority-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -470,14 +470,14 @@ export default function LeadSearchPage() {
         .review-count{color:#8899bb;font-size:11px;}
         .cache-tag{display:flex;align-items:center;gap:3px;font-size:10px;color:#ffd700;background:rgba(255,215,0,.1);padding:2px 7px;border-radius:10px;}
 
-        .contact-list{display:flex;flex-direction:column;gap:6px;}
+        .contact-list{display:flex;flex-direction:column;gap:5px;}
         .contact-row{display:flex;align-items:center;gap:7px;font-size:12px;color:#8899bb;}
         .contact-row a{color:#3b9eff;text-decoration:none;}
         .contact-row a:hover{text-decoration:underline;}
 
-        .ai-insight{background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.1);border-radius:9px;padding:10px 12px;}
-        .insight-label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#00ff99;margin-bottom:5px;}
-        .ai-insight p{font-size:12px;color:#8899bb;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
+        .ai-insight{background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.1);border-radius:9px;padding:9px 11px;}
+        .insight-label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#00ff99;margin-bottom:4px;}
+        .ai-insight p{font-size:12px;color:#8899bb;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;margin:0;}
 
         .card-actions{display:flex;gap:8px;margin-top:auto;}
         .save-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border-radius:9px;border:1px solid rgba(0,255,153,.25);background:rgba(0,255,153,.08);color:#00ff99;font-size:13px;font-weight:600;cursor:pointer;transition:.2s;}
@@ -489,9 +489,22 @@ export default function LeadSearchPage() {
 
         @media(max-width:1100px){.filters-grid{grid-template-columns:repeat(2,1fr);}}
         @media(max-width:900px){
-          .main{margin-left:0;padding:16px;}
+          .main{margin-left:0;padding:12px;}
           .results-grid{grid-template-columns:1fr;}
           .filters-grid{grid-template-columns:1fr;}
+          .lead-card{padding:14px;gap:10px;}
+          .filters-panel{padding:16px;}
+          .page-header h1{font-size:20px;}
+          .skeleton-grid{grid-template-columns:1fr;}
+          .skeleton-card{height:200px;}
+        }
+        @media(max-width:600px){
+          .main{padding:10px;}
+          .lead-card{padding:12px;gap:8px;}
+          .company-name{font-size:12px;}
+          .ai-insight p{-webkit-line-clamp:2;}
+          .card-actions{flex-direction:column;}
+          .li-btn{justify-content:center;}
         }
       `}</style>
     </>
