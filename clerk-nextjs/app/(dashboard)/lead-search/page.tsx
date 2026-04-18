@@ -113,9 +113,22 @@ export default function LeadSearchPage() {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          ...lead,
-          aiInsights: lead.aiInsight, // API expects aiInsights (plural)
           email,
+          lead: {
+            placeId:     lead.placeId,
+            company:     lead.company     || "",
+            address:     lead.address     || "",
+            phone:       lead.phone       || "",
+            email:       lead.email       || null,
+            website:     lead.website     || "",
+            industry:    lead.industry    || "",
+            rating:      lead.rating      ?? null,
+            reviewCount: lead.reviewCount ?? 0,
+            score:       lead.score       ?? 0,
+            priority:    lead.priority    || "Medium",
+            aiInsight:   lead.aiInsight   || "",
+            linkedinUrl: lead.linkedinUrl || "",
+          },
         }),
       });
       const data = await res.json();
@@ -436,7 +449,6 @@ export default function LeadSearchPage() {
         .no-results{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px;color:#8899bb;font-size:14px;}
 
         .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;align-items:start;}
-        @media(min-width:1200px){.results-grid{grid-template-columns:repeat(3,1fr);}}
 
         /* Lead Card */
         .lead-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px;display:flex;flex-direction:column;gap:14px;transition:.2s;}
