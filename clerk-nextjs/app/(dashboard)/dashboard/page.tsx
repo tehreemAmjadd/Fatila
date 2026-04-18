@@ -86,9 +86,9 @@ export default function DashboardPage() {
             <p className="sub">{isAdmin ? "Platform overview & user management" : "Here's what's happening with your leads today"}</p>
           </div>
           <div className="header-right">
-            <span className="plan-pill" style={{color:isAdmin?"#ffd700":planCfg.color,borderColor:isAdmin?"rgba(255,215,0,.44)":` ${planCfg.color}44`,background:isAdmin?"rgba(255,215,0,.12)":`${planCfg.color}12`}}>
+            {/* <span className="plan-pill" style={{color:isAdmin?"#ffd700":planCfg.color,borderColor:isAdmin?"rgba(255,215,0,.44)":` ${planCfg.color}44`,background:isAdmin?"rgba(255,215,0,.12)":`${planCfg.color}12`}}>
               {isAdmin ? "Admin" : planCfg.label}
-            </span>
+            </span> */}
             {!isPaid && <a href="/billing" className="upgrade-btn">Upgrade</a>}
           </div>
         </div>
