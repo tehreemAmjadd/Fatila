@@ -112,7 +112,11 @@ export default function LeadSearchPage() {
       const res = await fetch("/api/leads/save", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ ...lead, email }),
+        body:JSON.stringify({
+          ...lead,
+          aiInsights: lead.aiInsight, // API expects aiInsights (plural)
+          email,
+        }),
       });
       const data = await res.json();
       if (data.error) { setSaveError(data.error); }
@@ -431,7 +435,7 @@ export default function LeadSearchPage() {
 
         .no-results{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px;color:#8899bb;font-size:14px;}
 
-        .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;}
+        .results-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;align-items:start;}
         @media(min-width:1200px){.results-grid{grid-template-columns:repeat(3,1fr);}}
 
         /* Lead Card */
@@ -461,7 +465,7 @@ export default function LeadSearchPage() {
 
         .ai-insight{background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.1);border-radius:9px;padding:10px 12px;}
         .insight-label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:#00ff99;margin-bottom:5px;}
-        .ai-insight p{font-size:12px;color:#8899bb;line-height:1.5;}
+        .ai-insight p{font-size:12px;color:#8899bb;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
 
         .card-actions{display:flex;gap:8px;margin-top:auto;}
         .save-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px;border-radius:9px;border:1px solid rgba(0,255,153,.25);background:rgba(0,255,153,.08);color:#00ff99;font-size:13px;font-weight:600;cursor:pointer;transition:.2s;}
