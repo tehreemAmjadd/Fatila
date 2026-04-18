@@ -168,7 +168,7 @@ export default function DashboardPage() {
                         {stats.recentLeads.map((lead:any,i:number)=>(
                           <div key={i} className="lead-row">
                             <div className="lead-l">
-                              <span className="lead-name">{lead.company}</span>
+                              <span className="lead-name">{lead.company.length > 35 ? lead.company.slice(0,35)+"…" : lead.company}</span>
                               <span className="lead-ind">{lead.industry}</span>
                             </div>
                             <div className="lead-r">
@@ -369,8 +369,8 @@ export default function DashboardPage() {
         .usage-warn a{color:#ff6b6b;margin-left:3px;}
 
         /* Content grid */
-        .content-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
-        .card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px;}
+        .content-grid{display:grid;grid-template-columns:1.2fr 0.8fr;gap:18px;}
+        .card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px;overflow:hidden;}
         .card-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
         .card-hdr h3{font-size:14px;font-weight:600;}
         .card-link{display:flex;align-items:center;gap:4px;color:#8899bb;font-size:12px;text-decoration:none;}
@@ -378,10 +378,10 @@ export default function DashboardPage() {
 
         /* Lead list */
         .lead-list{display:flex;flex-direction:column;gap:8px;}
-        .lead-row{display:flex;justify-content:space-between;align-items:center;padding:9px 11px;background:rgba(255,255,255,.03);border-radius:8px;gap:8px;}
-        .lead-l{display:flex;flex-direction:column;gap:2px;min-width:0;}
-        .lead-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-        .lead-ind{font-size:11px;color:#8899bb;}
+        .lead-row{display:flex;justify-content:space-between;align-items:center;padding:9px 11px;background:rgba(255,255,255,.03);border-radius:8px;gap:8px;min-width:0;}
+        .lead-l{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1;overflow:hidden;}
+        .lead-name{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+        .lead-ind{font-size:11px;color:#8899bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
         .lead-r{display:flex;align-items:center;gap:5px;flex-shrink:0;}
         .badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:12px;}
         .lead-score{display:flex;align-items:center;gap:3px;font-size:11px;color:#ffd700;}
