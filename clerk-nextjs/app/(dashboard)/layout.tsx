@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
+import Link from "next/link";
 import {
   LayoutDashboard, Bot, Search, Bookmark,
   Mail, Phone, CheckSquare, Upload, CreditCard, Megaphone,
@@ -57,6 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d")!;
+    let animId: number;
     const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
     resize();
     window.addEventListener("resize", resize);
@@ -83,10 +85,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             ctx.strokeStyle = `rgba(0,255,153,${.1 * (1 - d / 120)})`; ctx.stroke();
           }
         }
-      requestAnimationFrame(draw);
+      animId = requestAnimationFrame(draw);
     };
     draw();
-    return () => window.removeEventListener("resize", resize);
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
   }, []);
 
   // Close sidebar on outside click
@@ -121,14 +126,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
         <nav>
           {NAV.map(({ href, label, Icon }) => (
-            <a key={href} href={href} className={pathname === href ? "active" : ""}>
+            <Link key={href} href={href} className={pathname === href ? "active" : ""}>
               <Icon size={15} strokeWidth={1.8} />{label}
-            </a>
+            </Link>
           ))}
         </nav>
         <div className="sb-footer">
           <span style={{ color: planCfg.color, fontSize: 11, fontWeight: 700 }}>{planCfg.label} Plan</span>
-          <a href="/billing" className="sb-upgrade">Upgrade</a>
+          <Link href="/billing" className="sb-upgrade">Upgrade</Link>
         </div>
       </div>
 
