@@ -3,11 +3,22 @@
 import { useState, useEffect, useRef } from "react";
 import { UserButton, useAuth, OrganizationSwitcher } from "@clerk/nextjs";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 
 export default function HomePage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
   const { isSignedIn } = useAuth();
+  const router = useRouter();
+
+  /** Auth-aware dashboard navigation */
+  const handleDashboardClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (isSignedIn) {
+      router.push("/dashboard");
+    } else {
+      router.push("/sign-in?redirect_url=/dashboard");
+    }
+  };
 
   /** Typing Effect */
   const fullText = "AI Powered Lead Intelligence Engine";
@@ -207,7 +218,14 @@ export default function HomePage() {
             <a href="#" className="hover:text-[#39d353] transition-colors duration-200">Home</a>
             <a href="#features" className="hover:text-[#39d353] transition-colors duration-200">Features</a>
             <a href="#how" className="hover:text-[#39d353] transition-colors duration-200">How It Works</a>
-            <a href="/dashboard" className="hover:text-[#39d353] transition-colors duration-200">Dashboard</a>
+
+            {/* ✅ Dashboard link — auth-aware */}
+            <button
+              onClick={handleDashboardClick}
+              className="hover:text-[#39d353] transition-colors duration-200 bg-transparent border-none cursor-pointer text-white"
+            >
+              Dashboard
+            </button>
 
             {!isSignedIn && (
               <>
@@ -251,22 +269,29 @@ export default function HomePage() {
             { label: "Home", href: "#" },
             { label: "Features", href: "#features" },
             { label: "How It Works", href: "#how" },
-            { label: "Dashboard", href: "/dashboard" },
-          ].map((item, i, arr) => (
+          ].map((item, i) => (
             <a
               key={item.label}
               href={item.href}
               onClick={() => setMenuOpen(false)}
-              className={`block px-6 py-3 text-sm hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all duration-200 ${i < arr.length - 1 ? "border-b border-[rgba(255,255,255,0.06)]" : ""}`}
+              className="block px-6 py-3 text-sm hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all duration-200 border-b border-[rgba(255,255,255,0.06)]"
             >
               {item.label}
             </a>
           ))}
 
+          {/* ✅ Dashboard — auth-aware in mobile menu */}
+          <button
+            onClick={(e) => { setMenuOpen(false); handleDashboardClick(e); }}
+            className="block w-full text-left px-6 py-3 text-sm text-white hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all duration-200 border-b border-[rgba(255,255,255,0.06)] bg-transparent border-x-0 border-t-0 cursor-pointer"
+          >
+            Dashboard
+          </button>
+
           {/* Auth buttons */}
           {!isSignedIn && (
             <div className="flex flex-col gap-2 p-4 border-t border-[rgba(255,255,255,0.06)]">
-              <SignInButton>
+              <SignInButton forceRedirectUrl="/dashboard">
                 <button
                   onClick={() => setMenuOpen(false)}
                   className="w-full py-2 rounded-full border border-[rgba(57,211,83,0.45)] text-[#39d353] text-sm hover:bg-[rgba(57,211,83,0.1)] transition-all duration-200"
@@ -274,7 +299,7 @@ export default function HomePage() {
                   Sign In
                 </button>
               </SignInButton>
-              <SignUpButton>
+              <SignUpButton forceRedirectUrl="/dashboard">
                 <button
                   onClick={() => setMenuOpen(false)}
                   className="w-full py-2 rounded-full bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] font-semibold text-sm hover:scale-105 transition-transform duration-200"
@@ -306,12 +331,13 @@ export default function HomePage() {
             FTI Solutions helps businesses discover high-quality B2B leads using Google Business listings and public company data sources.
           </p>
 
-          <a
-            href="/dashboard"
-            className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105"
+          {/* ✅ Hero CTA — auth-aware */}
+          <button
+            onClick={handleDashboardClick}
+            className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
           >
             Start Finding Leads
-          </a>
+          </button>
         </section>
 
         {/* ── COUNTERS ── */}
@@ -353,7 +379,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ── HOW IT WORKS (new section) ── */}
+        {/* ── HOW IT WORKS ── */}
         <section id="how" className="px-10 py-24 max-w-[1000px] mx-auto text-center">
           <h2 className="text-3xl md:text-4xl mb-16">How It Works</h2>
 
@@ -379,12 +405,13 @@ export default function HomePage() {
             Use automation to discover high-value prospects.
           </p>
 
-          <a
-            href="/dashboard"
-            className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105"
+          {/* ✅ CTA button — auth-aware */}
+          <button
+            onClick={handleDashboardClick}
+            className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
           >
             Launch Platform
-          </a>
+          </button>
         </section>
 
         {/* ── FOOTER ── */}
