@@ -11,6 +11,7 @@ import {
 // ─── Plan config ──────────────────────────────────────────────────────────────
 const PLAN_CONFIG = {
   free:     { label:"Free",         color:"#8899bb", leadsMax:50,       aiMsgs:0 },
+  trial:    { label:"Trial",        color:"#ffd700", leadsMax:50,       aiMsgs:10 },
   starter:  { label:"Starter",      color:"#00ff99", leadsMax:100,      aiMsgs:50 },
   pro:      { label:"Professional", color:"#3b9eff", leadsMax:1000,     aiMsgs:500 },
   business: { label:"Business",     color:"#a78bfa", leadsMax:Infinity, aiMsgs:Infinity },
@@ -65,8 +66,13 @@ export default function DashboardPage() {
   // Admin always gets business-level access
   const plan      = isAdmin ? "business" : ((dbUser?.plan as PlanKey) || "free");
   const planCfg   = PLAN_CONFIG[plan] || PLAN_CONFIG.free;
-  const isPaid    = isAdmin || plan !== "free";
-  const leadsUsed = stats?.monthlyLeads ?? stats?.leadsUsedThisMonth ?? stats?.totalLeads ?? 0;
+  const isPaid    = isAdmin || plan === "trial" || plan !== "free";
+  // Parse leadsUsed safely — API might return array, object, or number
+  const _rawLeads = stats?.totalLeads ?? stats?.monthlyLeads ?? stats?.leadsUsedThisMonth ?? 0;
+  const leadsUsed = typeof _rawLeads === "number" ? _rawLeads
+                  : Array.isArray(_rawLeads)       ? _rawLeads.length
+                  : typeof _rawLeads === "object" && _rawLeads !== null ? Number(Object.values(_rawLeads)[0] ?? 0)
+                  : Number(_rawLeads) || 0;
   const leadsMax  = planCfg.leadsMax;
   const pct       = leadsMax === Infinity ? 100 : Math.min((leadsUsed / leadsMax)*100, 100);
 
@@ -118,10 +124,10 @@ export default function DashboardPage() {
                 {/* Stat cards */}
                 <div className="stats-grid">
                   {[
-                    {Icon:Target,      label:"Total Leads",    value:stats?.totalLeads??0,        color:"#00ff99"},
-                    {Icon:Bookmark,    label:"Saved Leads",    value:stats?.savedLeads??0,        color:"#3b9eff"},
-                    {Icon:Flame,       label:"High Priority",  value:stats?.highPriorityLeads??0, color:"#ff6b6b"},
-                    {Icon:CheckSquare, label:"Tasks Done",     value:stats?.completedTasks??0,    color:"#a78bfa"},
+                    {Icon:Target,      label:"Total Leads",    value:leadsUsed,                                          color:"#00ff99"},
+                    {Icon:Bookmark,    label:"Saved Leads",    value:Number(stats?.savedLeads??0)||0,                    color:"#3b9eff"},
+                    {Icon:Flame,       label:"High Priority",  value:Number(stats?.highPriorityLeads??0)||0,             color:"#ff6b6b"},
+                    {Icon:CheckSquare, label:"Tasks Done",     value:Number(stats?.completedTasks??0)||0,                color:"#a78bfa"},
                   ].map(({Icon,label,value,color})=>(
                     <div className="stat-card" key={label}>
                       <div className="stat-icon" style={{background:`${color}14`,border:`1px solid ${color}28`}}>
