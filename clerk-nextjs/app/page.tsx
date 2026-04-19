@@ -180,6 +180,38 @@ export default function HomePage() {
         .cta-btn:hover {
           animation: glowPulse 1.8s ease-in-out infinite;
         }
+        .circuit-circle {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          width: 520px;
+          height: 520px;
+          border-radius: 50%;
+          border: 1.5px dashed rgba(57,211,83,0.25);
+          pointer-events: none;
+          z-index: 0;
+        }
+        .circuit-circle::before {
+          content: '';
+          position: absolute;
+          inset: 18px;
+          border-radius: 50%;
+          border: 1px solid rgba(47,164,255,0.18);
+          animation: spinCW 18s linear infinite;
+          pointer-events: none;
+        }
+        .circuit-circle::after {
+          content: '';
+          position: absolute;
+          inset: 40px;
+          border-radius: 50%;
+          border: 1.5px dashed rgba(57,211,83,0.2);
+          animation: spinCCW 12s linear infinite;
+          pointer-events: none;
+        }
+        @keyframes spinCW  { to { transform: rotate(360deg);  } }
+        @keyframes spinCCW { to { transform: rotate(-360deg); } }
       `}</style>
 
       {/* Canvas */}
@@ -321,11 +353,13 @@ export default function HomePage() {
         {/* ── HERO ── */}
         <section className="text-center max-w-[900px] mx-auto relative pt-[260px] pb-[120px] px-5">
 
-          <h1 className="text-4xl md:text-6xl mb-5 bg-clip-text text-transparent bg-gradient-to-r from-[#39d353] to-[#2fa4ff]">
+          <div className="circuit-circle" />
+
+          <h1 className="relative z-10 text-4xl md:text-6xl mb-5 bg-clip-text text-transparent bg-gradient-to-r from-[#39d353] to-[#2fa4ff]">
             {typedText}
           </h1>
 
-          <p className="text-[#c8d6ff] text-lg mb-10">
+          <p className="relative z-10 text-[#c8d6ff] text-lg mb-10">
             FTI Solutions helps businesses discover high-quality B2B leads using Google Business listings and public company data sources.
           </p>
 
