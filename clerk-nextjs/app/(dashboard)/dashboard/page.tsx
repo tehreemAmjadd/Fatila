@@ -10,7 +10,7 @@ import {
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
 const PLAN_CONFIG = {
-  free:     { label:"Free",         color:"#8899bb", leadsMax:0,        aiMsgs:0 },
+  free:     { label:"Free",         color:"#8899bb", leadsMax:50,       aiMsgs:0 },
   starter:  { label:"Starter",      color:"#00ff99", leadsMax:100,      aiMsgs:50 },
   pro:      { label:"Professional", color:"#3b9eff", leadsMax:1000,     aiMsgs:500 },
   business: { label:"Business",     color:"#a78bfa", leadsMax:Infinity, aiMsgs:Infinity },
@@ -66,7 +66,7 @@ export default function DashboardPage() {
   const plan      = isAdmin ? "business" : ((dbUser?.plan as PlanKey) || "free");
   const planCfg   = PLAN_CONFIG[plan] || PLAN_CONFIG.free;
   const isPaid    = isAdmin || plan !== "free";
-  const leadsUsed = stats?.totalLeads ?? 0;
+  const leadsUsed = stats?.monthlyLeads ?? stats?.leadsUsedThisMonth ?? stats?.totalLeads ?? 0;
   const leadsMax  = planCfg.leadsMax;
   const pct       = leadsMax === Infinity ? 100 : Math.min((leadsUsed / leadsMax)*100, 100);
 
@@ -136,20 +136,20 @@ export default function DashboardPage() {
                 <div className="usage-card">
                   <div className="usage-row">
                     <span className="usage-lbl">Lead usage this month</span>
-                    <span className="usage-val" style={{color:pct>=90?"#ff6b6b":planCfg.color}}>
+                    <span className="usage-val" style={{color:pct>=80?"#ff6b6b":planCfg.color}}>
                       {leadsMax===Infinity ? `${leadsUsed} used  ·  Unlimited` : `${leadsUsed} / ${leadsMax}`}
                     </span>
                   </div>
                   <div className="usage-track">
                     <div className="usage-fill" style={{
                       width:`${pct}%`,
-                      background: leadsMax===Infinity?"#a78bfa":pct>=90?"#ff6b6b":pct>=70?"#ffd700":"#00ff99"
+                      background: leadsMax===Infinity?"#a78bfa":pct>=80?"#ff6b6b":pct>=60?"#ffd700":"#00ff99"
                     }}/>
                   </div>
-                  {pct>=90 && leadsMax!==Infinity && (
+                  {pct>=80 && leadsMax!==Infinity && (
                     <p className="usage-warn">
                       <AlertTriangle size={12} color="#ff6b6b" style={{display:"inline",marginRight:4}}/>
-                      Almost at limit — <a href="/billing">upgrade now</a>
+                      {pct>=100 ? "Limit reached — " : "Almost at limit — "}<a href="/billing">upgrade now</a>
                     </p>
                   )}
                 </div>

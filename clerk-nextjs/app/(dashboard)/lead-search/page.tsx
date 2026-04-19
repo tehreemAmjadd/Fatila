@@ -10,7 +10,7 @@ import {
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
 const PLAN_CONFIG = {
-  free:     { label:"Free",         color:"#8899bb", leadsMax:0    },
+  free:     { label:"Free",         color:"#8899bb", leadsMax:50   },
   trial:    { label:"Trial",        color:"#ffd700", leadsMax:50   },
   starter:  { label:"Starter",      color:"#00ff99", leadsMax:100  },
   pro:      { label:"Professional", color:"#3b9eff", leadsMax:1000 },
@@ -66,18 +66,26 @@ export default function LeadSearchPage() {
   const email = user?.primaryEmailAddress?.emailAddress;
 
   // ── Fetch plan ────────────────────────────────────────────────────────────
-  useEffect(() => {
+  const fetchUser = useCallback(async () => {
     if (!email) return;
-    fetch("/api/get-user", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) })
-      .then(r => r.json()).then(setDbUser).catch(console.error);
+    try {
+      const r = await fetch("/api/get-user", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) });
+      const data = await r.json();
+      setDbUser(data);
+    } catch(e) { console.error(e); }
   }, [email]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
 
   // ── Derived plan info ─────────────────────────────────────────────────────
   const isAdmin       = dbUser?.role === "admin";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey) || "free");
   const planCfg       = isAdmin ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
-  const canSearch     = isAdmin || (effectivePlan !== "free" && effectivePlan !== "expired");
-  const leadsUsed     = dbUser?.totalLeads ?? 0;
+  // Free plan users CAN search (they have 50 lead limit), only expired users are blocked
+  const canSearch     = isAdmin || effectivePlan !== "expired";
+  const leadsUsed     = dbUser?.totalLeads ?? dbUser?.leadsUsed ?? dbUser?.monthlyLeads ?? 0;
   const leadsMax      = planCfg.leadsMax;
   const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
@@ -99,6 +107,8 @@ export default function LeadSearchPage() {
       });
       const data = await res.json();
       setResults(data.leads || []);
+      // Re-fetch user to update lead usage count in progress bar
+      await fetchUser();
     } catch(err) { console.error(err); setResults([]); }
     finally { setLoading(false); }
   };
@@ -162,19 +172,13 @@ export default function LeadSearchPage() {
           </div>
         </div>
 
-        {/* ── FREE / EXPIRED GATE ── */}
+        {/* ── EXPIRED GATE ── */}
         {!canSearch && (
           <div className="gate-box">
             <div className="gate-icon"><Lock size={30} strokeWidth={1.4} color="#8899bb"/></div>
-            <h3>{effectivePlan === "expired" ? "Your trial has expired" : "Lead Search is a Paid Feature"}</h3>
-            <p>
-              {effectivePlan === "expired"
-                ? "Your 7-day trial has ended. Upgrade to keep searching for leads."
-                : "Upgrade to start finding and saving high-quality business leads powered by Google Places + AI."}
-            </p>
-            <a href="/billing" className="gate-cta">
-              {effectivePlan === "expired" ? "Choose a Plan" : "Start Free Trial or Upgrade"}
-            </a>
+            <h3>Your trial has expired</h3>
+            <p>Your 7-day trial has ended. Upgrade to keep searching for leads and accessing all platform features.</p>
+            <a href="/billing" className="gate-cta">Choose a Plan</a>
           </div>
         )}
 
@@ -235,7 +239,7 @@ export default function LeadSearchPage() {
                 <div className="usage-track">
                   <div className="usage-fill" style={{
                     width:`${Math.min((leadsUsed/leadsMax)*100,100)}%`,
-                    background:atLimit?"#ff6b6b":leadsUsed/leadsMax>=.7?"#ffd700":"#00ff99",
+                    background:atLimit?"#ff6b6b":leadsUsed/leadsMax>=.8?"#ffd700":"#00ff99",
                   }}/>
                 </div>
               </div>
