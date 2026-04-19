@@ -321,8 +321,6 @@ export default function HomePage() {
         {/* ── HERO ── */}
         <section className="text-center max-w-[900px] mx-auto relative pt-[260px] pb-[120px] px-5">
 
-          <div className="circuit-circle"></div>
-
           <h1 className="text-4xl md:text-6xl mb-5 bg-clip-text text-transparent bg-gradient-to-r from-[#39d353] to-[#2fa4ff]">
             {typedText}
           </h1>
@@ -332,9 +330,9 @@ export default function HomePage() {
           </p>
 
           {/* ✅ Hero CTA — auth-aware */}
-            <button
+          <button
             onClick={handleDashboardClick}
-            className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
+            className="cta-btn relative z-10 inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
           >
             Start Finding Leads
           </button>
