@@ -17,9 +17,9 @@ export const metadata: Metadata = {
   title: 'Fatila AI',
   description: 'AI Powered Lead Intelligence Platform',
     icons: {
-    icon: '/favicon.ico.png',        // ya '/logo.png'
-    shortcut: '/favicon.ico.png',
-    apple: '/favicon.ico.png',
+    icon: '/favicon.png',        // ya '/logo.png'
+    shortcut: '/favicon.png',
+    apple: '/favicon.png',
   },
 }
 
