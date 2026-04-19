@@ -332,7 +332,7 @@ export default function HomePage() {
           </p>
 
           {/* ✅ Hero CTA — auth-aware */}
-          <button
+            <button
             onClick={handleDashboardClick}
             className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
           >
