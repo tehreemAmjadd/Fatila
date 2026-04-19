@@ -208,7 +208,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
 
         /* ── Page wrapper ── */
-.page-wrapper{margin-left:100px;min-height:100vh;position:relative;z-index:1;}
+.page-wrapper{min-height:100vh;position:relative;z-index:1;}
         .main{padding:20px;min-height:100vh;}
 
         /* ── Mobile ── */
