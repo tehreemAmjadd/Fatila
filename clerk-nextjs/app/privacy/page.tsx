@@ -123,7 +123,7 @@ export default function PrivacyPage() {
         <li><strong>Lodge a complaint</strong> with a data protection authority</li>
       </ul>
       <p>
-        To exercise these rights, email <a href="mailto:privacy@fatilaai.com">privacy@fatilaai.com</a>. We will
+        To exercise these rights, email <a href="mailto:info@ftisolutions.tech">info@ftisolutions.tech</a>. We will
         respond within 30 days.
       </p>
 
@@ -153,36 +153,21 @@ export default function PrivacyPage() {
         a child has provided data, contact us for immediate deletion.
       </p>
 
-      <h2>11. California Residents (CCPA)</h2>
-      <p>
-        California residents have additional rights including the right to know categories of personal
-        information collected, to opt out of any sale of personal information (note: we do not sell personal
-        information), and to non-discrimination for exercising these rights.
-      </p>
-
-      <h2>12. UAE Residents (PDPL)</h2>
-      <p>
-        UAE residents have rights under the Personal Data Protection Law including the right to access, correct,
-        and delete their data, and to object to processing. Contact{" "}
-        <a href="mailto:privacy@fatilaai.com">privacy@fatilaai.com</a> to exercise these rights.
-      </p>
-
-      <h2>13. Changes to This Policy</h2>
+      <h2>11. Changes to This Policy</h2>
       <p>
         We may update this Privacy Policy periodically. Material changes will be communicated via email or
         in-app notification at least 30 days before taking effect.
       </p>
 
-      <h2>14. Contact Us</h2>
+      <h2>12. Contact Us</h2>
       <div className="highlight-box">
         <p style={{ marginBottom: 0 }}>
           <strong>Fatila Techno Innovations — Privacy Team</strong>
           <br />
-          Email: <a href="mailto:privacy@fatilaai.com">privacy@fatilaai.com</a>
+          Email: <a href="mailto:info@ftisolutions.tech">info@ftisolutions.tech</a>
           <br />
           Website: <a href="https://fatilaai.com">fatilaai.com</a>
           <br />
-          Address: Rawalpindi, Punjab, Pakistan
         </p>
       </div>
     </LegalLayout>

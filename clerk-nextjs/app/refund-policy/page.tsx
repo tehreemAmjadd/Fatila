@@ -14,7 +14,7 @@ export default function RefundPolicyPage() {
         <p style={{ marginBottom: 0 }}>
           <strong>Quick Summary:</strong> We offer a <strong>14-day money-back guarantee</strong> for new
           subscribers. If you're not satisfied within 14 days of your initial purchase, email{" "}
-          <a href="mailto:billing@fatilaai.com">billing@fatilaai.com</a> for a full refund.
+          <a href="mailto:info@ftisolutions.tech">info@ftisolutions.tech</a> for a full refund.
         </p>
       </div>
 
@@ -36,7 +36,7 @@ export default function RefundPolicyPage() {
       <h2>2. How to Request a Refund</h2>
       <ol>
         <li>
-          Email us at <a href="mailto:billing@fatilaai.com">billing@fatilaai.com</a> from the email address
+          Email us at <a href="mailto:info@ftisolutions.tech">info@ftisolutions.tech</a> from the email address
           associated with your Fatila account
         </li>
         <li>Include your order/transaction ID (found in your Paddle receipt email)</li>
@@ -103,7 +103,7 @@ export default function RefundPolicyPage() {
       <h2>8. Disputed Charges</h2>
       <p>
         If you believe a charge is incorrect, please contact us first at{" "}
-        <a href="mailto:billing@fatilaai.com">billing@fatilaai.com</a> before initiating a chargeback with your
+        <a href="mailto:info@ftisolutions.tech">info@ftisolutions.tech</a> before initiating a chargeback with your
         bank. We will work quickly to resolve billing disputes.
       </p>
       <p>
@@ -132,7 +132,7 @@ export default function RefundPolicyPage() {
         <p style={{ marginBottom: 0 }}>
           <strong>Fatila — Billing Support</strong>
           <br />
-          Email: <a href="mailto:billing@fatilaai.com">billing@fatilaai.com</a>
+          Email: <a href="mailto:info@ftisolutions.tech">info@ftisolutions.tech</a>
           <br />
           Response time: Within 2 business days
           <br />

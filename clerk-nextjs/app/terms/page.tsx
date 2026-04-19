@@ -165,11 +165,10 @@ export default function TermsPage() {
         <p style={{ marginBottom: 0 }}>
           <strong>Fatila Techno Innovations</strong>
           <br />
-          Email: <a href="mailto:legal@fatilaai.com">legal@fatilaai.com</a>
+          Email: <a href="mailt:info@ftisolutions.tech">info@ftisolutions.tech</a>
           <br />
           Website: <a href="https://fatilaai.com">fatilaai.com</a>
           <br />
-          Address: Rawalpindi, Punjab, Pakistan
         </p>
       </div>
     </LegalLayout>

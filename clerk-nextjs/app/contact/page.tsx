@@ -41,12 +41,12 @@ export default function ContactPage() {
   };
 
   const contactCards = [
-    { icon: "📧", title: "General Inquiries", desc: "Questions about Fatila or our company.", email: "hello@fatilaai.com", time: "Within 1 business day" },
-    { icon: "🛠️", title: "Customer Support", desc: "Technical issues, account help, how-to questions.", email: "support@fatilaai.com", time: "Within 24 hours" },
-    { icon: "💳", title: "Billing & Refunds", desc: "Subscription questions, invoices, refund requests.", email: "billing@fatilaai.com", time: "Within 2 business days" },
-    { icon: "🔒", title: "Privacy & Legal", desc: "Data requests, GDPR/CCPA inquiries, legal matters.", email: "privacy@fatilaai.com", time: "Within 30 days" },
-    { icon: "🤝", title: "Partnerships", desc: "Integration partners, affiliates, media inquiries.", email: "partnerships@fatilaai.com", time: "Within 3 business days" },
-    { icon: "🏢", title: "Enterprise Sales", desc: "Custom plans, API access, volume pricing.", email: "sales@fatilaai.com", time: "Within 1 business day" },
+    { icon: "📧", title: "General Inquiries", desc: "Questions about Fatila or our company.", email: "info@ftisolutions.tech", time: "Within 3 business day" },
+    { icon: "🛠️", title: "Customer Support", desc: "Technical issues, account help, how-to questions.", email: "info@ftisolutions.tech", time: "Within 3 business days" },
+    { icon: "💳", title: "Billing & Refunds", desc: "Subscription questions, invoices, refund requests.", email: "info@ftisolutions.tech", time: "Within 3 business days" },
+    { icon: "🔒", title: "Privacy & Legal", desc: "Data requests, GDPR/CCPA inquiries, legal matters.", email: "info@ftisolutions.tech", time: "Within 3 days" },
+    { icon: "🤝", title: "Partnerships", desc: "Integration partners, affiliates, media inquiries.", email: "info@ftisolutions.tech", time: "Within 3 business days" },
+    { icon: "🏢", title: "Enterprise Sales", desc: "Custom plans, API access, volume pricing.", email: "info@ftisolutions.tech", time: "Within 3 business day" },
   ];
 
   return (
@@ -86,20 +86,6 @@ export default function ContactPage() {
           <br />
           A multinational technology group with operations across Pakistan, UAE, Saudi Arabia, and Jordan.
         </p>
-        <p>
-          <strong>Headquarters / Registered Office:</strong>
-          <br />
-          Rawalpindi, Punjab
-          <br />
-          Islamic Republic of Pakistan
-        </p>
-        <p>
-          <strong>Business Hours:</strong>
-          <br />
-          Monday – Friday: 9:00 AM – 6:00 PM (PKT / GMT+5)
-          <br />
-          Saturday – Sunday: Email support only
-        </p>
         <p style={{ marginBottom: 0 }}>
           <strong>Website:</strong> <a href="https://fatilaai.com">fatilaai.com</a>
           <br />
@@ -110,7 +96,7 @@ export default function ContactPage() {
         </p>
       </div>
 
-      <h2>Send Us a Message</h2>
+      {/* <h2>Send Us a Message</h2>
 
       <form onSubmit={handleSubmit} className="bg-[rgba(255,255,255,0.04)] p-8 rounded-xl border border-[rgba(0,170,255,.2)] my-6 not-prose">
         <p className="text-[#cdd9ff] text-sm mb-6">Use the form below, and we'll route your message to the right team.</p>
@@ -200,7 +186,7 @@ export default function ContactPage() {
         <p className="text-xs text-[#9fb8e6] mt-5">
           By submitting this form, you agree to our <a href="/privacy" className="text-[#39d353] hover:underline">Privacy Policy</a>.
         </p>
-      </form>
+      </form> */}
     </LegalLayout>
   );
 }
