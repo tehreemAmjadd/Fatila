@@ -62,16 +62,28 @@ export default function LeadSearchPage() {
   const [saveError, setSaveError] = useState("");
 
   // Plan
-  const [dbUser, setDbUser] = useState<any>(null);
+  const [dbUser,     setDbUser]     = useState<any>(null);
+  const [leadsCount, setLeadsCount] = useState<number>(0);
   const email = user?.primaryEmailAddress?.emailAddress;
 
-  // ── Fetch plan ────────────────────────────────────────────────────────────
+  // ── Fetch plan + real lead count ──────────────────────────────────────────
   const fetchUser = useCallback(async () => {
     if (!email) return;
     try {
-      const r = await fetch("/api/get-user", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) });
-      const data = await r.json();
-      setDbUser(data);
+      // Fetch user info AND dashboard stats in parallel (same as dashboard page)
+      const [uRes, sRes] = await Promise.all([
+        fetch("/api/get-user",        { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) }),
+        fetch("/api/dashboard/stats", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) }),
+      ]);
+      const uData = await uRes.json();
+      const sData = await sRes.json();
+      setDbUser(uData);
+      // Parse totalLeads safely from stats (same logic as dashboard)
+      const raw = sData?.totalLeads ?? uData?.totalLeads ?? uData?.leadsUsed ?? 0;
+      const count = typeof raw === "number" ? raw
+                  : Array.isArray(raw)       ? raw.length
+                  : Number(raw) || 0;
+      setLeadsCount(count);
     } catch(e) { console.error(e); }
   }, [email]);
 
@@ -85,7 +97,7 @@ export default function LeadSearchPage() {
   const planCfg       = isAdmin ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
   // Free plan users CAN search (they have 50 lead limit), only expired users are blocked
   const canSearch     = isAdmin || effectivePlan !== "expired";
-  const leadsUsed     = dbUser?.totalLeads ?? dbUser?.leadsUsed ?? dbUser?.monthlyLeads ?? 0;
+  const leadsUsed     = leadsCount;
   const leadsMax      = planCfg.leadsMax;
   const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
