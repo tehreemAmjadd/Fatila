@@ -201,8 +201,7 @@ export default function LegalLayout({ children, title, lastUpdated }: LegalLayou
 
       <div className="relative z-10">
         {/* ── NAVBAR ── */}
-        <nav className="fixed top-6 left-0 right-0 mx-auto flex justify-between items-center px-10 py-4 w-[90%] max-w-[1100px] rounded-[60px] bg-[rgba(7,31,74,0.55)] backdrop-blur-[16px] border border-[rgba(0,170,255,.25)] z-50">
-          {/* Brand */}
+        {/* <nav className="fixed top-6 left-0 right-0 mx-auto flex justify-between items-center px-10 py-4 w-[90%] max-w-[1100px] rounded-[60px] bg-[rgba(7,31,74,0.55)] backdrop-blur-[16px] border border-[rgba(0,170,255,.25)] z-50">
           <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-[#39d353]">
             <img
               src="https://ftisolutions.tech/wp-content/uploads/2025/05/Asset-1.svg"
@@ -212,7 +211,6 @@ export default function LegalLayout({ children, title, lastUpdated }: LegalLayou
             Fatila
           </Link>
 
-          {/* Desktop Links */}
           <div className="hidden md:flex items-center gap-7">
             <Link href="/" className="hover:text-[#39d353] transition-colors duration-200">Home</Link>
             <Link href="/#features" className="hover:text-[#39d353] transition-colors duration-200">Features</Link>
@@ -246,7 +244,6 @@ export default function LegalLayout({ children, title, lastUpdated }: LegalLayou
             )}
           </div>
 
-          {/* Hamburger */}
           <button
             onClick={toggleMenu}
             aria-label="Toggle menu"
@@ -256,10 +253,10 @@ export default function LegalLayout({ children, title, lastUpdated }: LegalLayou
             <span className="hb-bar" />
             <span className="hb-bar" />
           </button>
-        </nav>
+        </nav> */}
 
         {/* Mobile Menu */}
-        <div
+        {/* <div
           className={`md:hidden mobile-menu ${menuOpen ? "mobile-menu-open" : "mobile-menu-closed"} fixed top-[86px] right-[5%] w-[210px] z-40 rounded-2xl overflow-hidden border border-[rgba(0,170,255,.3)] bg-[rgba(7,25,65,0.97)] backdrop-blur-[12px] shadow-[0_12px_40px_rgba(0,0,0,0.7)]`}
         >
           {[
@@ -311,7 +308,7 @@ export default function LegalLayout({ children, title, lastUpdated }: LegalLayou
               <OrganizationSwitcher />
             </div>
           )}
-        </div>
+        </div> */}
 
         {/* ── PAGE CONTENT ── */}
         <section className="pt-[160px] pb-[80px] px-6 md:px-10 max-w-[900px] mx-auto">
