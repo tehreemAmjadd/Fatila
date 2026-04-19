@@ -31,34 +31,51 @@ export default function DashboardPage() {
 
   const email = user?.primaryEmailAddress?.emailAddress;
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
+  // ── fetchStats — reusable, called on load + tab-focus + interval ─────────
+  const fetchStats = async (em: string) => {
+    try {
+      const [uRes, sRes] = await Promise.all([
+        fetch("/api/get-user",        { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email: em }) }),
+        fetch("/api/dashboard/stats", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email: em }) }),
+      ]);
+      const uData = await uRes.json();
+      const sData = await sRes.json();
+      setDbUser(uData);
+      setStats(sData);
+      if (uData.role === "admin") {
+        const aRes  = await fetch("/api/admin/users", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email: em }) });
+        const aData = await aRes.json();
+        const users = aData.users || [];
+        setAdminUsers(users);
+        const breakdown: Record<string,number> = {};
+        users.forEach((u:any) => { const p = u.plan || "free"; breakdown[p] = (breakdown[p]||0)+1; });
+        setPlanStats(breakdown);
+      }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  // Initial load
   useEffect(() => {
     if (!email) return;
-    (async () => {
-      try {
-        const [uRes, sRes] = await Promise.all([
-          fetch("/api/get-user",        { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) }),
-          fetch("/api/dashboard/stats", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) }),
-        ]);
-        const uData = await uRes.json();
-        const sData = await sRes.json();
-        setDbUser(uData); setStats(sData);
-        if (uData.role === "admin") {
-          const aRes  = await fetch("/api/admin/users", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) });
-          const aData = await aRes.json();
-          const users = aData.users || [];
-          setAdminUsers(users);
-          // Calculate plan breakdown
-          const breakdown: Record<string,number> = {};
-          users.forEach((u:any) => {
-            const p = u.plan || "free";
-            breakdown[p] = (breakdown[p] || 0) + 1;
-          });
-          setPlanStats(breakdown);
-        }
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
+    fetchStats(email);
+  }, [email]);
+
+  // Re-fetch when user returns to this tab (e.g. after lead search)
+  useEffect(() => {
+    if (!email) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchStats(email);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [email]);
+
+  // Poll every 20s while dashboard is open — keeps count live
+  useEffect(() => {
+    if (!email) return;
+    const id = setInterval(() => fetchStats(email), 20_000);
+    return () => clearInterval(id);
   }, [email]);
 
   // ── Derived ──────────────────────────────────────────────────────────────

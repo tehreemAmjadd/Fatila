@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     // ── Run all queries in parallel ──────────────────────────────────────
     const [
-      totalLeads,
+      leadsInDb,
       savedLeads,
       highPriorityLeads,
       completedTasks,
@@ -115,7 +115,12 @@ export async function POST(req: NextRequest) {
       count,
     }));
 
-    console.log(`📊 Dashboard stats for ${email}: ${totalLeads} leads, ${savedLeads} saved, ${recentLeadsRaw.length} recent`);
+    // Use the higher of: actual DB lead records vs user-level counter
+    // (some platforms track searches separately from saved leads)
+    const userLeadsCounter = Number((user as any).totalLeads ?? (user as any).leadsUsed ?? (user as any).leadsGenerated ?? 0);
+    const totalLeads = Math.max(leadsInDb, userLeadsCounter);
+
+    console.log(`📊 Dashboard stats for ${email}: ${totalLeads} leads (db:${leadsInDb} counter:${userLeadsCounter}), ${savedLeads} saved, ${recentLeadsRaw.length} recent`);
 
     return NextResponse.json({
       totalLeads,
