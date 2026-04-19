@@ -1,6 +1,6 @@
 "use client";
 
-import LegalLayout from "../../components/LegalLayout";
+import LegalLayout from "../components/LegalLayout";
 
 export default function RefundPolicyPage() {
   return (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import LegalLayout from "../../components/LegalLayout";
+import LegalLayout from "../components/LegalLayout";
 
 export default function ContactPage() {
   const [formData, setFormData] = useState({
