@@ -1,17 +1,24 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, ReactNode } from "react";
 import { UserButton, useAuth, OrganizationSwitcher } from "@clerk/nextjs";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-export default function HomePage() {
+interface LegalLayoutProps {
+  children: ReactNode;
+  title: string;
+  lastUpdated?: string;
+}
+
+export default function LegalLayout({ children, title, lastUpdated }: LegalLayoutProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { isSignedIn } = useAuth();
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const toggleMenu = () => setMenuOpen(!menuOpen);
 
-  /** Auth-aware dashboard navigation */
   const handleDashboardClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (isSignedIn) {
@@ -21,42 +28,7 @@ export default function HomePage() {
     }
   };
 
-  /** Typing Effect */
-  const fullText = "AI Powered Lead Intelligence Engine";
-  const [typedText, setTypedText] = useState("");
-  useEffect(() => {
-    let i = 0;
-    const interval = setInterval(() => {
-      setTypedText(fullText.slice(0, i + 1));
-      i++;
-      if (i >= fullText.length) clearInterval(interval);
-    }, 60);
-    return () => clearInterval(interval);
-  }, []);
-
-  /** Counters */
-  const targets = { leads: 10000, companies: 5000, industries: 120, countries: 35 };
-  const [counts, setCounts] = useState({ leads: 0, companies: 0, industries: 0, countries: 0 });
-  useEffect(() => {
-    const increment = () => {
-      setCounts((prev) => {
-        const newCounts = { ...prev };
-        let done = true;
-        for (const key in prev) {
-          const k = key as keyof typeof prev;
-          if (prev[k] < targets[k]) {
-            newCounts[k] = Math.min(prev[k] + Math.ceil(targets[k] / 100), targets[k]);
-            done = false;
-          }
-        }
-        if (!done) requestAnimationFrame(increment);
-        return newCounts;
-      });
-    };
-    increment();
-  }, []);
-
-  /** Canvas Background Animation */
+  /** Canvas Background Animation — identical to homepage */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -121,31 +93,8 @@ export default function HomePage() {
     return () => window.removeEventListener("resize", resize);
   }, []);
 
-  /** Mobile Menu */
-  const [menuOpen, setMenuOpen] = useState(false);
-  const toggleMenu = () => setMenuOpen(!menuOpen);
-
-  /** Features */
-  const features = [
-    { title: "Smart Lead Discovery", desc: "Search businesses by industry, location and keywords." },
-    { title: "Google Business Leads", desc: "Extract business contacts from Google listings." },
-    { title: "Business Directory Intelligence", desc: "Discover companies from verified public directories." },
-    { title: "Automation Workflows", desc: "Leads processed instantly using automation systems." },
-    { title: "Real-Time Data", desc: "Instant lead delivery using modern webhook systems." },
-    { title: "Export Leads", desc: "Download leads or send them to CRM platforms." },
-  ];
-
-  /** How It Works */
-  const steps = [
-    { num: "01", title: "Define Your Target", desc: "Set your industry, region, and keywords to focus your search." },
-    { num: "02", title: "AI Scans Sources", desc: "Our engine crawls Google listings, directories, and public databases." },
-    { num: "03", title: "Leads Delivered", desc: "Get enriched, verified contacts instantly — ready for outreach." },
-  ];
-
   return (
     <div className="relative text-white min-h-screen w-full overflow-hidden">
-
-      {/* Hamburger + mobile menu styles */}
       <style>{`
         .hb-bar {
           display: block;
@@ -174,48 +123,67 @@ export default function HomePage() {
           pointer-events: all;
         }
 
-        @keyframes glowPulse {
-          0%, 100% { box-shadow: 0 0 18px rgba(57,211,83,.45); }
-          50%       { box-shadow: 0 0 38px rgba(57,211,83,.8); }
+        .legal-content h2 {
+          color: #39d353;
+          font-size: 1.6rem;
+          font-weight: 600;
+          margin-top: 2.5rem;
+          margin-bottom: 1rem;
+          padding-bottom: 0.5rem;
+          border-bottom: 1px solid rgba(57,211,83,0.2);
         }
-        .cta-btn:hover {
-          animation: glowPulse 1.8s ease-in-out infinite;
+        .legal-content h3 {
+          color: #2fa4ff;
+          font-size: 1.2rem;
+          font-weight: 600;
+          margin-top: 1.5rem;
+          margin-bottom: 0.75rem;
         }
-        .circuit-circle {
-          position: absolute;
-          top: 60%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-          width: 520px;
-          height: 520px;
-          border-radius: 50%;
-          border: 1.5px dashed rgba(57,211,83,0.25);
-          pointer-events: none;
-          z-index: 0;
+        .legal-content p {
+          color: #cdd9ff;
+          margin-bottom: 1rem;
+          line-height: 1.75;
         }
-        .circuit-circle::before {
-          content: '';
-          position: absolute;
-          inset: 18px;
-          border-radius: 50%;
-          border: 1px solid rgba(47,164,255,0.18);
-          animation: spinCW 18s linear infinite;
-          pointer-events: none;
+        .legal-content ul, .legal-content ol {
+          color: #cdd9ff;
+          margin-bottom: 1rem;
+          padding-left: 1.5rem;
+          line-height: 1.75;
         }
-        .circuit-circle::after {
-          content: '';
-          position: absolute;
-          inset: 40px;
-          border-radius: 50%;
-          border: 1.5px dashed rgba(57,211,83,0.2);
-          animation: spinCCW 12s linear infinite;
-          pointer-events: none;
+        .legal-content ul li { list-style: disc; margin-bottom: 0.4rem; }
+        .legal-content ol li { list-style: decimal; margin-bottom: 0.4rem; }
+        .legal-content a { color: #39d353; text-decoration: underline; }
+        .legal-content a:hover { color: #2fa4ff; }
+        .legal-content strong { color: #ffffff; font-weight: 600; }
+        .legal-content table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1.5rem 0;
+          background: rgba(255,255,255,0.03);
+          border-radius: 8px;
+          overflow: hidden;
         }
-        @keyframes spinCW  { to { transform: rotate(360deg);  } }
-        @keyframes spinCCW { to { transform: rotate(-360deg); } }
+        .legal-content th, .legal-content td {
+          padding: 12px 16px;
+          text-align: left;
+          border-bottom: 1px solid rgba(0,170,255,0.15);
+          color: #cdd9ff;
+        }
+        .legal-content th {
+          background: rgba(57,211,83,0.08);
+          color: #39d353;
+          font-weight: 600;
+        }
+        .highlight-box {
+          background: rgba(57,211,83,0.07);
+          border-left: 3px solid #39d353;
+          padding: 16px 22px;
+          margin: 20px 0;
+          border-radius: 6px;
+        }
       `}</style>
 
-      {/* Canvas */}
+      {/* Canvas Background */}
       <canvas
         ref={canvasRef}
         style={{
@@ -232,10 +200,8 @@ export default function HomePage() {
       <div className="fixed inset-0 bg-gradient-to-br from-[#020817] via-[#04102b] to-[#02060f] z-[-20]" />
 
       <div className="relative z-10">
-
         {/* ── NAVBAR ── */}
         <nav className="fixed top-6 left-0 right-0 mx-auto flex justify-between items-center px-10 py-4 w-[90%] max-w-[1100px] rounded-[60px] bg-[rgba(7,31,74,0.55)] backdrop-blur-[16px] border border-[rgba(0,170,255,.25)] z-50">
-
           {/* Brand */}
           <Link href="/" className="flex items-center gap-2 font-semibold text-lg text-[#39d353]">
             <img
@@ -246,14 +212,12 @@ export default function HomePage() {
             Fatila
           </Link>
 
-          {/* ── Desktop Links (hidden on mobile) ── */}
+          {/* Desktop Links */}
           <div className="hidden md:flex items-center gap-7">
-            <a href="#" className="hover:text-[#39d353] transition-colors duration-200">Home</a>
-            <a href="#features" className="hover:text-[#39d353] transition-colors duration-200">Features</a>
-            <a href="#how" className="hover:text-[#39d353] transition-colors duration-200">How It Works</a>
-            <Link href="/contact" className="hover:text-[#39d353] transition-colors duration-200">Contact</Link>
+            <Link href="/" className="hover:text-[#39d353] transition-colors duration-200">Home</Link>
+            <Link href="/#features" className="hover:text-[#39d353] transition-colors duration-200">Features</Link>
+            <Link href="/#how" className="hover:text-[#39d353] transition-colors duration-200">How It Works</Link>
 
-            {/* ✅ Dashboard link — auth-aware */}
             <button
               onClick={handleDashboardClick}
               className="hover:text-[#39d353] transition-colors duration-200 bg-transparent border-none cursor-pointer text-white"
@@ -282,7 +246,7 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* ── Hamburger button (visible on mobile only) ── */}
+          {/* Hamburger */}
           <button
             onClick={toggleMenu}
             aria-label="Toggle menu"
@@ -294,28 +258,25 @@ export default function HomePage() {
           </button>
         </nav>
 
-        {/* ── Mobile Dropdown (md:hidden) ── */}
+        {/* Mobile Menu */}
         <div
           className={`md:hidden mobile-menu ${menuOpen ? "mobile-menu-open" : "mobile-menu-closed"} fixed top-[86px] right-[5%] w-[210px] z-40 rounded-2xl overflow-hidden border border-[rgba(0,170,255,.3)] bg-[rgba(7,25,65,0.97)] backdrop-blur-[12px] shadow-[0_12px_40px_rgba(0,0,0,0.7)]`}
         >
-          {/* Nav links */}
           {[
-            { label: "Home", href: "#" },
-            { label: "Features", href: "#features" },
-            { label: "How It Works", href: "#how" },
-            { label: "Contact", href: "/contact" },
+            { label: "Home", href: "/" },
+            { label: "Features", href: "/#features" },
+            { label: "How It Works", href: "/#how" },
           ].map((item) => (
-            <a
+            <Link
               key={item.label}
               href={item.href}
               onClick={() => setMenuOpen(false)}
               className="block px-6 py-3 text-sm hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all duration-200 border-b border-[rgba(255,255,255,0.06)]"
             >
               {item.label}
-            </a>
+            </Link>
           ))}
 
-          {/* ✅ Dashboard — auth-aware in mobile menu */}
           <button
             onClick={(e) => { setMenuOpen(false); handleDashboardClick(e); }}
             className="block w-full text-left px-6 py-3 text-sm text-white hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all duration-200 border-b border-[rgba(255,255,255,0.06)] bg-transparent border-x-0 border-t-0 cursor-pointer"
@@ -323,7 +284,6 @@ export default function HomePage() {
             Dashboard
           </button>
 
-          {/* Auth buttons */}
           {!isSignedIn && (
             <div className="flex flex-col gap-2 p-4 border-t border-[rgba(255,255,255,0.06)]">
               <SignInButton forceRedirectUrl="/dashboard">
@@ -353,100 +313,19 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* ── HERO ── */}
-        <section className="text-center max-w-[900px] mx-auto relative pt-[260px] pb-[120px] px-5">
-
-          <div className="circuit-circle" />
-
-          <h1 className="relative z-10 text-4xl md:text-6xl mb-5 bg-clip-text text-transparent bg-gradient-to-r from-[#39d353] to-[#2fa4ff]">
-            {typedText}
+        {/* ── PAGE CONTENT ── */}
+        <section className="pt-[160px] pb-[80px] px-6 md:px-10 max-w-[900px] mx-auto">
+          <h1 className="text-4xl md:text-5xl mb-3 bg-clip-text text-transparent bg-gradient-to-r from-[#39d353] to-[#2fa4ff] font-bold">
+            {title}
           </h1>
-
-          <p className="relative z-10 text-[#c8d6ff] text-lg mb-10">
-            Fatila helps businesses discover high-quality B2B leads using Google Business listings and public company data sources.
-          </p>
-
-          {/* ✅ Hero CTA — auth-aware */}
-          <button
-            onClick={handleDashboardClick}
-            className="cta-btn relative z-10 inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
-          >
-            Start Finding Leads
-          </button>
-        </section>
-
-        {/* ── COUNTERS ── */}
-        <section className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-7 px-10 py-24 text-center">
-          <div>
-            <h2 className="text-4xl text-[#39d353]">{counts.leads.toLocaleString()}+</h2>
-            <p className="text-[#c8d6ff] mt-1">Leads Generated</p>
+          {lastUpdated && (
+            <p className="text-[#9fb8e6] text-sm italic mb-10">
+              Last updated: {lastUpdated}
+            </p>
+          )}
+          <div className="legal-content">
+            {children}
           </div>
-          <div>
-            <h2 className="text-4xl text-[#39d353]">{counts.companies.toLocaleString()}+</h2>
-            <p className="text-[#c8d6ff] mt-1">Companies Indexed</p>
-          </div>
-          <div>
-            <h2 className="text-4xl text-[#39d353]">{counts.industries}+</h2>
-            <p className="text-[#c8d6ff] mt-1">Industries Covered</p>
-          </div>
-          <div>
-            <h2 className="text-4xl text-[#39d353]">{counts.countries}+</h2>
-            <p className="text-[#c8d6ff] mt-1">Countries</p>
-          </div>
-        </section>
-
-        {/* ── FEATURES ── */}
-        <section id="features" className="px-10 py-24 max-w-[1200px] mx-auto">
-          <h2 className="text-3xl md:text-4xl text-center mb-16">
-            Platform Features
-          </h2>
-
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(250px,1fr))] gap-7">
-            {features.map((f) => (
-              <div
-                key={f.title}
-                className="bg-[rgba(255,255,255,0.04)] p-8 rounded-xl border border-[rgba(0,170,255,.2)] hover:-translate-y-2 hover:shadow-[0_10px_40px_rgba(0,0,0,.4),0_0_20px_rgba(57,211,83,.25)] hover:border-[#39d353] transition-all duration-500"
-              >
-                <h3 className="text-[#39d353] mb-2">{f.title}</h3>
-                <p className="text-[#cdd9ff] text-sm">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── HOW IT WORKS ── */}
-        <section id="how" className="px-10 py-24 max-w-[1000px] mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl mb-16">How It Works</h2>
-
-          <div className="grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-10">
-            {steps.map((step) => (
-              <div key={step.num} className="flex flex-col items-center">
-                <div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#39d353] to-[#2fa4ff] flex items-center justify-center text-[#081633] font-bold text-lg mb-4 shadow-[0_0_22px_rgba(57,211,83,0.45)]">
-                  {step.num}
-                </div>
-                <h3 className="text-[#39d353] font-semibold mb-2">{step.title}</h3>
-                <p className="text-[#cdd9ff] text-sm leading-relaxed">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── CTA ── */}
-        <section className="text-center py-28 px-5">
-          <h2 className="text-3xl mb-5">
-            Start Generating Quality Leads
-          </h2>
-          <p className="text-[#c8d6ff] mb-8">
-            Use automation to discover high-value prospects.
-          </p>
-
-          {/* ✅ CTA button — auth-aware */}
-          <button
-            onClick={handleDashboardClick}
-            className="cta-btn inline-block px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none"
-          >
-            Launch Platform
-          </button>
         </section>
 
         {/* ── FOOTER ── */}
@@ -471,8 +350,8 @@ export default function HomePage() {
             <div>
               <h4 className="text-white font-semibold mb-3 text-sm uppercase tracking-wide">Product</h4>
               <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="text-[#9fb8e6] hover:text-[#39d353] transition-colors">Features</a></li>
-                <li><a href="#how" className="text-[#9fb8e6] hover:text-[#39d353] transition-colors">How It Works</a></li>
+                <li><Link href="/#features" className="text-[#9fb8e6] hover:text-[#39d353] transition-colors">Features</Link></li>
+                <li><Link href="/#how" className="text-[#9fb8e6] hover:text-[#39d353] transition-colors">How It Works</Link></li>
                 <li><Link href="/pricing" className="text-[#9fb8e6] hover:text-[#39d353] transition-colors">Pricing</Link></li>
               </ul>
             </div>
@@ -501,7 +380,6 @@ export default function HomePage() {
             © 2026 Fatila — A Fatila Techno Innovations Company. All rights reserved.
           </div>
         </footer>
-
       </div>
     </div>
   );
