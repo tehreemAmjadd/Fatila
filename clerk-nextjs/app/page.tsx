@@ -17,7 +17,7 @@ export default function HomePage() {
     if (isSignedIn) {
       router.push("/dashboard");
     } else {
-      router.push("/dashboard");
+      window.location.href = "https://accounts.fatilaai.com/sign-in?redirect_url=https%3A%2F%2Ffatilaai.com%2Fdashboard";
     }
   };
 
