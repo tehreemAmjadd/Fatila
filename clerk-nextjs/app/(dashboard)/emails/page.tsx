@@ -104,6 +104,25 @@ export default function EmailsPage() {
   const [bulkProgress,   setBulkProgress]   = useState({sent:0,failed:0,total:0,current:""});
   const [aiPerLead,      setAiPerLead]      = useState(false);
 
+  // Bulk attachments
+  const [bulkAttachments,    setBulkAttachments]    = useState<File[]>([]);
+  const bulkFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleBulkFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const MAX_SIZE = 10 * 1024 * 1024;
+    const valid = files.filter(f => {
+      if (f.size > MAX_SIZE) { alert(`${f.name} is too large (max 10MB)`); return false; }
+      return true;
+    });
+    setBulkAttachments(prev => [...prev, ...valid]);
+    if (bulkFileInputRef.current) bulkFileInputRef.current.value = "";
+  };
+
+  const removeBulkAttachment = (index: number) => {
+    setBulkAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
   // Logs
   const [logs,        setLogs]        = useState<EmailLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
@@ -243,9 +262,17 @@ export default function EmailsPage() {
         } catch{}
       }
       try {
-        const res  = await fetch("/api/emails/send", { method:"POST", headers:{"Content-Type":"application/json"},
-          body:JSON.stringify({ email:userEmail, to:lead.email, subject:finalSubject, body:finalBody,
-            companyName:lead.company, smtpEmail:storedEmail, smtpPassword:storedPassword }) });
+        const bulkForm = new FormData();
+        bulkForm.append("email",        userEmail || "");
+        bulkForm.append("to",           lead.email);
+        bulkForm.append("subject",      finalSubject);
+        bulkForm.append("body",         finalBody);
+        bulkForm.append("companyName",  lead.company);
+        bulkForm.append("smtpEmail",    storedEmail);
+        bulkForm.append("smtpPassword", storedPassword);
+        bulkAttachments.forEach(file => bulkForm.append("attachments", file));
+
+        const res  = await fetch("/api/emails/send", { method:"POST", body:bulkForm });
         const data = await res.json();
         if (data.success) sent++; else failed++;
       } catch { failed++; }
@@ -508,6 +535,43 @@ export default function EmailsPage() {
                   </div>
                   <div className="field"><label>Body</label>
                     <textarea rows={8} value={bulkBody} onChange={e=>setBulkBody(e.target.value)} placeholder={`Dear {{company}},\n\nI wanted to reach out...`}/>
+                  </div>
+
+                  {/* Bulk Attachments */}
+                  <div className="field">
+                    <label>Attachments <span className="hint">Same files sent to all leads — max 10MB each</span></label>
+                    <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                      {bulkAttachments.length > 0 && (
+                        <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+                          {bulkAttachments.map((file, i) => (
+                            <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",background:"rgba(0,255,153,.06)",border:"1px solid rgba(0,255,153,.15)",borderRadius:"8px",padding:"7px 10px"}}>
+                              <span style={{fontSize:"18px"}}>{file.type.includes("pdf")?"📄":file.type.includes("image")?"🖼️":file.type.includes("sheet")||file.name.endsWith(".xlsx")?"📊":"📎"}</span>
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:"12px",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{file.name}</div>
+                                <div style={{fontSize:"10px",color:"#8899bb"}}>{formatFileSize(file.size)}</div>
+                              </div>
+                              <button onClick={()=>removeBulkAttachment(i)} style={{background:"none",border:"none",color:"#ff4d4d",cursor:"pointer",padding:"2px",display:"flex",alignItems:"center"}}>
+                                <X size={14}/>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <input
+                        ref={bulkFileInputRef}
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.zip"
+                        onChange={handleBulkFileChange}
+                        style={{display:"none"}}
+                      />
+                      <button
+                        onClick={()=>bulkFileInputRef.current?.click()}
+                        style={{display:"flex",alignItems:"center",gap:"6px",background:"rgba(255,255,255,.05)",border:"1px dashed rgba(255,255,255,.2)",color:"#8899bb",padding:"9px 14px",borderRadius:"9px",fontSize:"12px",cursor:"pointer",transition:".2s",width:"fit-content"}}
+                      >
+                        📎 Attach Files {bulkAttachments.length > 0 && `(${bulkAttachments.length})`}
+                      </button>
+                    </div>
                   </div>
 
                   {bulkSending&&(
