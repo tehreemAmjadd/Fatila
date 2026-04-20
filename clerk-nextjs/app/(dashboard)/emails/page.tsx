@@ -815,35 +815,49 @@ export default function EmailsPage() {
           .bulk-layout{grid-template-columns:1fr;}
           .ai-grid{grid-template-columns:1fr;}
           .compose-layout{grid-template-columns:220px 1fr;}
+          .lead-list{max-height:220px;}
         }
         @media(max-width:900px){
-          .main{margin-left:0;padding:16px;}
-          .page-header{flex-direction:column;}
+          .main{margin-left:0;padding:14px;}
+          .page-header{flex-direction:column;gap:10px;}
           .compose-layout{grid-template-columns:1fr;}
-          .leads-sidebar{max-height:220px;}
-          .bulk-layout{grid-template-columns:1fr;gap:14px;}
-          .bulk-leads-panel,.bulk-compose-panel{padding:14px;}
+          .leads-sidebar{max-height:200px;}
+          .bulk-layout{display:flex;flex-direction:column;gap:14px;}
+          .bulk-leads-panel,.bulk-compose-panel{padding:14px;width:100%;box-sizing:border-box;}
           .bulk-panel-hdr{flex-wrap:wrap;gap:8px;}
-          .lead-list{max-height:260px;}
+          .lead-list{max-height:200px;}
           .logs-table th:nth-child(3),.logs-table td:nth-child(3){display:none;}
           .logs-table th:nth-child(5),.logs-table td:nth-child(5){display:none;}
-          .logs-table td,.logs-table th{padding:8px 10px;font-size:12px;}
+          .logs-table td,.logs-table th{padding:8px 8px;font-size:12px;}
+          .send-btn{width:100%;justify-content:center;}
+          .header-right{flex-wrap:wrap;}
         }
         @media(max-width:600px){
-          .main{padding:12px;}
-          .tabs-row{gap:3px;padding:4px;}
-          .tab-btn{padding:8px 10px;font-size:12px;gap:5px;}
-          .bulk-layout{grid-template-columns:1fr;}
-          .bulk-lead-row{padding:8px;}
-          .bulk-lead-av{width:24px;height:24px;font-size:10px;}
+          .main{padding:10px;}
+          .tabs-row{gap:2px;padding:3px;}
+          .tab-btn{padding:7px 6px;font-size:11px;gap:4px;flex:1;}
+          .bulk-layout{display:flex;flex-direction:column;gap:12px;}
+          .bulk-leads-panel,.bulk-compose-panel{padding:12px;border-radius:10px;}
+          .bulk-lead-row{padding:7px 8px;}
+          .bulk-lead-av{width:26px;height:26px;font-size:11px;border-radius:6px;}
           .bulk-lead-name{font-size:12px;}
           .bulk-lead-email{font-size:10px;}
-          .send-btn{width:100%;justify-content:center;}
-          .logs-table-wrap{overflow-x:auto;}
-          .logs-table{min-width:420px;}
-          .modal-box{width:96%;}
+          .bulk-checkbox{width:15px;height:15px;}
+          .send-btn{width:100%;justify-content:center;padding:12px;}
+          .logs-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+          .logs-table{min-width:380px;}
+          .logs-table td,.logs-table th{padding:7px 8px;font-size:11px;}
+          .modal-box{width:96%;margin:8px;}
+          .modal-body{padding:14px 16px;}
+          .modal-head{padding:14px 16px;}
+          .modal-foot{padding:12px 16px;}
           .ai-grid{grid-template-columns:1fr;}
-          .page-header h1{font-size:20px;}
+          .page-header h1{font-size:18px;}
+          .compose-card{padding:14px;}
+          .field input,.field select,.field textarea{font-size:12px;padding:8px 10px;}
+          .select-all-btn{font-size:11px;padding:3px 8px;}
+          .bulk-panel-hdr h3{font-size:13px;}
+          .lead-list{max-height:180px;}
         }
       `}</style>
     </>
