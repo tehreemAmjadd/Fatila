@@ -79,7 +79,7 @@ const PLANS = [
 function BillingContent() {
   const { user } = useUser();
   const searchParams = useSearchParams();
-  const [billingCycle,  setBillingCycle]  = useState<"monthly"|"yearly">("monthly");
+  // billing is monthly only
   const [dbUser,        setDbUser]        = useState<any>(null);
   const [trialLoading,  setTrialLoading]  = useState(false);
   const [trialSuccess,  setTrialSuccess]  = useState(false);
@@ -161,12 +161,7 @@ function BillingContent() {
         <div className="billing-header">
           <h2>Simple, Transparent Pricing</h2>
           <p className="billing-sub">No hidden fees. Cancel anytime.</p>
-          <div className="cycle-toggle">
-            <button className={`cycle-btn ${billingCycle==="monthly"?"active":""}`} onClick={()=>setBillingCycle("monthly")}>Monthly</button>
-            <button className={`cycle-btn ${billingCycle==="yearly"?"active":""}`} onClick={()=>setBillingCycle("yearly")}>
-              Yearly <span className="save-tag">Save 17%</span>
-            </button>
-          </div>
+
         </div>
 
         {!isAdmin && (canStartTrial || trialSuccess) && !isPaid && !isOnTrial && (
@@ -209,8 +204,8 @@ function BillingContent() {
 
         <div className="plans-grid">
           {PLANS.map((p) => {
-            const usd = billingCycle==="monthly" ? p.monthlyUSD : p.yearlyUSD;
-            const pkr = billingCycle==="monthly" ? p.monthlyPKR : p.yearlyPKR;
+            const usd = p.monthlyUSD;
+            const pkr = p.monthlyPKR;
             return (
               <div key={p.name} className={`plan-card ${p.popular?"popular":""}`}>
                 {p.popular && <div className="popular-badge">Most Popular</div>}
@@ -277,11 +272,7 @@ function BillingContent() {
         .billing-header{text-align:center;margin-bottom:32px;}
         .billing-header h2{color:#00ff99;font-size:26px;margin-bottom:8px;}
         .billing-sub{color:#8899bb;font-size:14px;margin-bottom:20px;}
-        .cycle-toggle{display:inline-flex;gap:4px;background:rgba(255,255,255,.05);border-radius:30px;padding:4px;}
-        .cycle-btn{padding:7px 20px;border-radius:26px;border:none;background:transparent;color:#8899bb;font-size:13px;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:6px;}
-        .cycle-btn.active{background:#00ff99;color:#081633;font-weight:700;}
-        .save-tag{background:rgba(0,255,153,.15);color:#00ff99;font-size:10px;padding:2px 7px;border-radius:20px;}
-        .cycle-btn.active .save-tag{background:rgba(8,22,51,.25);color:#081633;}
+        
         .trial-card{display:flex;gap:40px;background:rgba(0,255,153,.04);border:1px solid rgba(0,255,153,.2);border-radius:16px;padding:28px 32px;margin-bottom:28px;align-items:center;}
         .trial-left{flex:1;}
         .trial-badge{display:inline-flex;align-items:center;gap:6px;background:#00ff99;color:#020817;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px;}

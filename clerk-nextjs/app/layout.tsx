@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'Fatila AI',
   description: 'AI Powered Lead Intelligence Platform',
-    icons: {
-    icon: '/favicon.png',        // ya '/logo.png'
+  icons: {
+    icon: '/favicon.png',
     shortcut: '/favicon.png',
     apple: '/favicon.png',
   },
@@ -29,15 +29,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
- <ClerkProvider 
-  afterSignOutUrl="/"
-  appearance={{
-    elements: {
-      organizationSwitcherTrigger: "hidden",
-      organizationPreviewMainIdentifier: "hidden",
-    }
-  }}
->
+    <ClerkProvider
+      afterSignOutUrl="/"
+      appearance={{
+        elements: {
+          organizationSwitcherTrigger: "hidden",
+          organizationPreviewMainIdentifier: "hidden",
+        }
+      }}
+    >
       <html lang="en">
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}

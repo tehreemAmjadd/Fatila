@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { UserButton, useAuth, OrganizationSwitcher } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import { SignInButton, SignUpButton } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -17,7 +17,7 @@ export default function HomePage() {
     if (isSignedIn) {
       router.push("/dashboard");
     } else {
-      router.push("/sign-in?redirect_url=/dashboard");
+      router.push("/dashboard");
     }
   };
 
