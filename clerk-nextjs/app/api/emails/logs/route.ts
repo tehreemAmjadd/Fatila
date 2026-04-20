@@ -2,10 +2,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const email = searchParams.get("email");
+    const body = await req.json();
+    const email = body.email;
     if (!email) return NextResponse.json({ error: "Email required" }, { status: 400 });
 
     const user = await db.user.findUnique({ where: { email } });

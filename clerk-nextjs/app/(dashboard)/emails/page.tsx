@@ -177,7 +177,7 @@ export default function EmailsPage() {
     if (!userEmail) return;
     setLogsLoading(true);
     try {
-      const res  = await fetch("/api/emails/logs", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email:userEmail }) });
+      const res  = await fetch(`/api/emails/logs?email=${encodeURIComponent(userEmail)}`, { method:"GET" });
       const data = await res.json();
       setLogs(data.logs||[]);
     } catch(e){console.error(e);}
@@ -811,12 +811,39 @@ export default function EmailsPage() {
         .spin{animation:spin .7s linear infinite;}
         @keyframes spin{to{transform:rotate(360deg)}}
 
-        @media(max-width:1100px){.bulk-layout{grid-template-columns:1fr;}.ai-grid{grid-template-columns:1fr;}.compose-layout{grid-template-columns:220px 1fr;}}
+        @media(max-width:1100px){
+          .bulk-layout{grid-template-columns:1fr;}
+          .ai-grid{grid-template-columns:1fr;}
+          .compose-layout{grid-template-columns:220px 1fr;}
+        }
         @media(max-width:900px){
           .main{margin-left:0;padding:16px;}
           .page-header{flex-direction:column;}
           .compose-layout{grid-template-columns:1fr;}
           .leads-sidebar{max-height:220px;}
+          .bulk-layout{grid-template-columns:1fr;gap:14px;}
+          .bulk-leads-panel,.bulk-compose-panel{padding:14px;}
+          .bulk-panel-hdr{flex-wrap:wrap;gap:8px;}
+          .lead-list{max-height:260px;}
+          .logs-table th:nth-child(3),.logs-table td:nth-child(3){display:none;}
+          .logs-table th:nth-child(5),.logs-table td:nth-child(5){display:none;}
+          .logs-table td,.logs-table th{padding:8px 10px;font-size:12px;}
+        }
+        @media(max-width:600px){
+          .main{padding:12px;}
+          .tabs-row{gap:3px;padding:4px;}
+          .tab-btn{padding:8px 10px;font-size:12px;gap:5px;}
+          .bulk-layout{grid-template-columns:1fr;}
+          .bulk-lead-row{padding:8px;}
+          .bulk-lead-av{width:24px;height:24px;font-size:10px;}
+          .bulk-lead-name{font-size:12px;}
+          .bulk-lead-email{font-size:10px;}
+          .send-btn{width:100%;justify-content:center;}
+          .logs-table-wrap{overflow-x:auto;}
+          .logs-table{min-width:420px;}
+          .modal-box{width:96%;}
+          .ai-grid{grid-template-columns:1fr;}
+          .page-header h1{font-size:20px;}
         }
       `}</style>
     </>
