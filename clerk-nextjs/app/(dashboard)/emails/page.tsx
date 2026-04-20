@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useUser } from "@clerk/nextjs";
 import {
   Mail, Send, Sparkles, Settings, Lock, AlertTriangle,
@@ -52,6 +52,31 @@ export default function EmailsPage() {
   const [body,     setBody]     = useState("");
   const [sending,  setSending]  = useState(false);
   const [sendResult, setSendResult] = useState<{type:"success"|"error";msg:string}|null>(null);
+
+  // Attachments
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const MAX_SIZE = 10 * 1024 * 1024; // 10MB per file
+    const valid = files.filter(f => {
+      if (f.size > MAX_SIZE) { alert(`${f.name} is too large (max 10MB)`); return false; }
+      return true;
+    });
+    setAttachments(prev => [...prev, ...valid]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   // AI generation
   const [showAiPanel,     setShowAiPanel]     = useState(false);
@@ -173,11 +198,23 @@ export default function EmailsPage() {
     if (!storedEmail||!storedPassword) { setShowSetup(true); return; }
     setSending(true); setSendResult(null);
     try {
-      const res  = await fetch("/api/emails/send", { method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ email:userEmail, to:toEmail, subject, body, smtpEmail:storedEmail, smtpPassword:storedPassword }) });
+      const formData = new FormData();
+      formData.append("email", userEmail || "");
+      formData.append("to", toEmail);
+      formData.append("subject", subject);
+      formData.append("body", body);
+      formData.append("smtpEmail", storedEmail);
+      formData.append("smtpPassword", storedPassword);
+      attachments.forEach(file => formData.append("attachments", file));
+
+      const res  = await fetch("/api/emails/send", { method:"POST", body:formData });
       const data = await res.json();
-      if (data.success) { setSendResult({type:"success",msg:"Email sent successfully!"}); setToEmail(""); setSubject(""); setBody(""); }
-      else               setSendResult({type:"error",msg:data.error||"Send failed"});
+      if (data.success) {
+        setSendResult({type:"success",msg:"Email sent successfully!"});
+        setToEmail(""); setSubject(""); setBody(""); setAttachments([]);
+      } else {
+        setSendResult({type:"error",msg:data.error||"Send failed"});
+      }
     } catch{ setSendResult({type:"error",msg:"Network error. Try again."}); }
     finally{setSending(false);}
   };
@@ -368,6 +405,43 @@ export default function EmailsPage() {
                     <div className="field"><label>To</label><input value={toEmail} onChange={e=>setToEmail(e.target.value)} placeholder="recipient@example.com" type="email"/></div>
                     <div className="field"><label>Subject</label><input value={subject} onChange={e=>setSubject(e.target.value)} placeholder="Email subject..."/></div>
                     <div className="field"><label>Body</label><textarea rows={10} value={body} onChange={e=>setBody(e.target.value)} placeholder="Write your email here..."/></div>
+
+                    {/* Attachments */}
+                    <div className="field">
+                      <label>Attachments <span className="hint">PDF, DOCX, XLSX, images — max 10MB each</span></label>
+                      <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+                        {attachments.length > 0 && (
+                          <div style={{display:"flex",flexDirection:"column",gap:"5px"}}>
+                            {attachments.map((file, i) => (
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:"8px",background:"rgba(0,255,153,.06)",border:"1px solid rgba(0,255,153,.15)",borderRadius:"8px",padding:"7px 10px"}}>
+                                <span style={{fontSize:"18px"}}>{file.type.includes("pdf")?"📄":file.type.includes("image")?"🖼️":file.type.includes("sheet")||file.name.endsWith(".xlsx")?"📊":"📎"}</span>
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:"12px",fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{file.name}</div>
+                                  <div style={{fontSize:"10px",color:"#8899bb"}}>{formatFileSize(file.size)}</div>
+                                </div>
+                                <button onClick={()=>removeAttachment(i)} style={{background:"none",border:"none",color:"#ff4d4d",cursor:"pointer",padding:"2px",display:"flex",alignItems:"center"}}>
+                                  <X size={14}/>
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.png,.jpg,.jpeg,.gif,.zip"
+                          onChange={handleFileChange}
+                          style={{display:"none"}}
+                        />
+                        <button
+                          onClick={()=>fileInputRef.current?.click()}
+                          style={{display:"flex",alignItems:"center",gap:"6px",background:"rgba(255,255,255,.05)",border:"1px dashed rgba(255,255,255,.2)",color:"#8899bb",padding:"9px 14px",borderRadius:"9px",fontSize:"12px",cursor:"pointer",transition:".2s",width:"fit-content"}}
+                        >
+                          📎 Attach Files {attachments.length > 0 && `(${attachments.length})`}
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {sendResult && (

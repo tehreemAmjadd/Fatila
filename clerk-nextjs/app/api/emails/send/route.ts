@@ -4,13 +4,52 @@ import { db } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   try {
-    const {
-      email: userEmail,
-      to, subject, body, companyName,
-      smtpEmail, smtpPassword,
-      smtpHost = "smtp.gmail.com",
-      smtpPort = 587,
-    } = await req.json();
+    const contentType = req.headers.get("content-type") || "";
+
+    let userEmail: string, to: string, subject: string, body: string;
+    let companyName: string | null = null;
+    let smtpEmail: string, smtpPassword: string;
+    let smtpHost = "smtp.gmail.com";
+    let smtpPort = 587;
+    let attachments: { filename: string; content: Buffer; contentType: string }[] = [];
+
+    // ── FormData (with attachments) ───────────────────────────────────────
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+
+      userEmail    = formData.get("email")        as string || "";
+      to           = formData.get("to")           as string || "";
+      subject      = formData.get("subject")      as string || "";
+      body         = formData.get("body")         as string || "";
+      companyName  = formData.get("companyName")  as string || null;
+      smtpEmail    = formData.get("smtpEmail")    as string || "";
+      smtpPassword = formData.get("smtpPassword") as string || "";
+      smtpHost     = formData.get("smtpHost")     as string || "smtp.gmail.com";
+      smtpPort     = Number(formData.get("smtpPort") || 587);
+
+      // Process attached files
+      const files = formData.getAll("attachments") as File[];
+      attachments = await Promise.all(
+        files.map(async (file) => ({
+          filename:    file.name,
+          content:     Buffer.from(await file.arrayBuffer()),
+          contentType: file.type || "application/octet-stream",
+        }))
+      );
+
+    // ── JSON (bulk send — no attachments) ────────────────────────────────
+    } else {
+      const json = await req.json();
+      userEmail    = json.email        || "";
+      to           = json.to           || "";
+      subject      = json.subject      || "";
+      body         = json.body         || "";
+      companyName  = json.companyName  || null;
+      smtpEmail    = json.smtpEmail    || "";
+      smtpPassword = json.smtpPassword || "";
+      smtpHost     = json.smtpHost     || "smtp.gmail.com";
+      smtpPort     = json.smtpPort     || 587;
+    }
 
     if (!to)      return NextResponse.json({ error: "Recipient email required" }, { status: 400 });
     if (!subject) return NextResponse.json({ error: "Subject required" }, { status: 400 });
@@ -36,13 +75,14 @@ export async function POST(req: NextRequest) {
 
     await transporter.verify();
 
-    // ✅ Send from USER's own email — not LeadVision AI
+    // ✅ Send from USER's own email — with optional attachments
     await transporter.sendMail({
       from:    `<${resolvedEmail}>`,
       to, subject,
       html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">${body.replace(/\n/g,"<br/>")}</div>`,
       text: body,
       replyTo: resolvedEmail,
+      ...(attachments.length > 0 && { attachments }),
     });
 
     // ✅ Save to EmailLog DB
