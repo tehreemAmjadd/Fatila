@@ -277,7 +277,6 @@ export default function HomePage() {
             {isSignedIn && (
               <>
                 <UserButton />
-                <OrganizationSwitcher />
               </>
             )}
           </div>
@@ -348,7 +347,6 @@ export default function HomePage() {
           {isSignedIn && (
             <div className="flex items-center gap-3 p-4 border-t border-[rgba(255,255,255,0.06)]">
               <UserButton />
-              <OrganizationSwitcher />
             </div>
           )}
         </div>

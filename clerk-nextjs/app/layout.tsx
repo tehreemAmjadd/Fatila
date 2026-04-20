@@ -29,7 +29,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider afterSignOutUrl="/">
+ <ClerkProvider 
+  afterSignOutUrl="/"
+  appearance={{
+    elements: {
+      organizationSwitcherTrigger: "hidden",
+      organizationPreviewMainIdentifier: "hidden",
+    }
+  }}
+>
       <html lang="en">
         <body
           className={`${geistSans.variable} ${geistMono.variable} antialiased`}
