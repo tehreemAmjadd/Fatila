@@ -259,6 +259,7 @@ export default function CallsPage() {
                     <>
                       {/* With phone */}
                       <div className="section-label"><Phone size={12}/>Leads with Phone Numbers ({filtered.filter(l=>l.phone).length})</div>
+                      <div className="table-scroll">
                       <table className="leads-table">
                         <thead><tr>
                           {bulkWaMode&&<th/>}
@@ -303,6 +304,7 @@ export default function CallsPage() {
                           })}
                         </tbody>
                       </table>
+                      </div>{/* end table-scroll */}
 
                       {/* Without phone */}
                       {filtered.filter(l=>!l.phone).length > 0 && (
@@ -359,6 +361,7 @@ export default function CallsPage() {
                       <p>No call logs yet. Log your first call from the Lead Calls tab.</p>
                     </div>
                   ) : (
+                    <div className="table-scroll">
                     <table className="leads-table">
                       <thead><tr>
                         <th>Company</th><th>Phone</th><th>Status</th><th>Notes</th><th>Date</th>
@@ -388,6 +391,7 @@ export default function CallsPage() {
                         })}
                       </tbody>
                     </table>
+                    </div>
                   )}
                 </div>
               </>
@@ -535,7 +539,9 @@ export default function CallsPage() {
 
         /* Table wrapper */
         .leads-table-wrap,.history-table-wrap{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:14px;overflow:hidden;margin-bottom:20px;}
-        .leads-table{width:100%;border-collapse:collapse;}
+        /* Scroll container sits inside the wrapper, below bulk-wa-bar & search */
+        .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+        .leads-table{width:100%;border-collapse:collapse;min-width:620px;}
         .leads-table th{padding:11px 16px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#8899bb;background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.07);white-space:nowrap;}
         .leads-table td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle;}
         .leads-table tr:last-child td{border-bottom:none;}
