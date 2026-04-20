@@ -147,19 +147,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <div id="sidebar" className={`sidebar ${sidebarActive ? "active" : ""}`}>
 
+        {/* ── Sidebar header: logo + close btn (always visible) ── */}
+        <div className="sb-header">
+          <div className="sb-logo">
+            <div className="logo-dot" />
+            <span>Fatila</span>
+          </div>
+          <button className="sb-close-btn" onClick={() => setSidebarActive(false)}>
+            <X size={18} />
+          </button>
+        </div>
+
         {/* ── Back to Homepage link ── */}
         <Link href="/" className="sb-home-link">
           <Home size={13} strokeWidth={2} />
           Back to Homepage
         </Link>
-
-        <div className="sb-logo">
-          <div className="logo-dot" />
-          <span>Fatila</span>
-          <button className="sb-close-btn" onClick={() => setSidebarActive(false)}>
-            <X size={18} />
-          </button>
-        </div>
 
         <nav>
           {NAV.map(({ href, label, Icon }) => (
@@ -210,6 +213,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           display:flex;flex-direction:column;
         }
 
+        /* Sidebar header row (logo + close btn) */
+        .sb-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+        .sb-logo{display:flex;align-items:center;gap:9px;padding:0 4px;color:#00ff99;font-size:17px;font-weight:700;}
+        .logo-dot{width:8px;height:8px;border-radius:50%;background:#00ff99;box-shadow:0 0 8px #00ff99;flex-shrink:0;}
+
+        /* Close btn — desktop mein hidden, mobile mein visible */
+        .sb-close-btn{display:none;background:none;border:none;color:#8899bb;cursor:pointer;padding:4px;border-radius:6px;transition:.2s;flex-shrink:0;}
+        .sb-close-btn:hover{color:white;background:rgba(255,255,255,.08);}
+
         /* Back to Homepage link */
         .sb-home-link{
           display:flex;align-items:center;gap:6px;
@@ -222,8 +234,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
         .sb-home-link:hover{color:#00ff99;border-color:rgba(0,255,153,.2);background:rgba(0,255,153,.05);}
 
-        .sb-logo{display:flex;align-items:center;gap:9px;margin-bottom:24px;padding:0 4px;color:#00ff99;font-size:17px;font-weight:700;}
-        .logo-dot{width:8px;height:8px;border-radius:50%;background:#00ff99;box-shadow:0 0 8px #00ff99;flex-shrink:0;}
         nav{display:flex;flex-direction:column;gap:2px;flex:1;}
         nav a{display:flex;align-items:center;gap:9px;color:#8899bb;text-decoration:none;font-size:13px;padding:9px 10px;border-radius:8px;transition:.2s;}
         nav a:hover,nav a.active{color:#00ff99;background:rgba(0,255,153,.08);}
@@ -241,10 +251,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           transition:.2s;text-align:left;
         }
         .sb-logout-btn:hover{background:rgba(255,107,107,.1);color:#ff8f8f;}
-
-        /* Close btn inside sidebar — desktop mein hidden */
-        .sb-close-btn{display:none;margin-left:auto;background:none;border:none;color:#8899bb;cursor:pointer;padding:4px;border-radius:6px;transition:.2s;flex-shrink:0;}
-        .sb-close-btn:hover{color:white;background:rgba(255,255,255,.08);}
 
         /* ── Overlay ── */
         .sidebar-overlay{
@@ -288,8 +294,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .logo-dot-sm{width:7px;height:7px;border-radius:50%;background:#00ff99;box-shadow:0 0 6px #00ff99;}
 
           /* Sidebar */
-          .sidebar{left:-260px;top:0;z-index:1000;}
+          .sidebar{
+            left:-260px;top:0;z-index:1000;
+            overflow-y:auto;
+          }
           .sidebar.active{left:0;box-shadow:6px 0 28px rgba(0,0,0,.6);}
+          /* Show close btn on mobile */
           .sb-close-btn{display:flex;}
 
           /* Content */
