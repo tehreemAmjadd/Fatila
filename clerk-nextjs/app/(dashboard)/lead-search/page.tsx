@@ -104,7 +104,7 @@ export default function LeadSearchPage() {
   // ── Search ────────────────────────────────────────────────────────────────
   const handleSearch = async () => {
     if (!canSearch || atLimit) return;
-    if (!location && !keyword && !industry) {
+    if (!location && !keyword) {
       alert("Please enter at least a location or keyword.");
       return;
     }
@@ -211,13 +211,7 @@ export default function LeadSearchPage() {
               <h3>Search Filters</h3>
             </div>
             <div className="filters-grid">
-              <div className="filter-group">
-                <label>Industry</label>
-                <select value={industry} onChange={e=>setIndustry(e.target.value)}>
-                  <option value="">All Industries</option>
-                  {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
-                </select>
-              </div>
+
               <div className="filter-group">
                 <label>Location <span className="req">*</span></label>
                 <input value={location} onChange={e=>setLocation(e.target.value)}
