@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { usePathname, useRouter } from "next/navigation";
+import { useUser, useClerk } from "@clerk/nextjs";
 import Link from "next/link";
 import {
   LayoutDashboard, Bot, Search, Bookmark,
   Mail, Phone, CheckSquare, Upload, CreditCard, Megaphone,
-  Menu, X,
+  Menu, X, Home, LogOut,
 } from "lucide-react";
 
 const NAV = [
@@ -34,7 +34,9 @@ const PLAN_CONFIG: Record<string, { label: string; color: string }> = {
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useUser();
+  const { signOut } = useClerk();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [sidebarActive, setSidebarActive] = useState(false);
   const [dbUser, setDbUser] = useState<any>(null);
@@ -109,6 +111,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setSidebarActive(false);
   }, [pathname]);
 
+  const handleLogout = async () => {
+    await signOut();
+    router.push("/");
+  };
+
   const effectivePlan = dbUser?.effectivePlan || "free";
   const planCfg = PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free;
 
@@ -139,6 +146,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Sidebar */}
       <div id="sidebar" className={`sidebar ${sidebarActive ? "active" : ""}`}>
+
+        {/* ── Back to Homepage link ── */}
+        <Link href="/" className="sb-home-link">
+          <Home size={13} strokeWidth={2} />
+          Back to Homepage
+        </Link>
+
         <div className="sb-logo">
           <div className="logo-dot" />
           <span>Fatila</span>
@@ -146,6 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <X size={18} />
           </button>
         </div>
+
         <nav>
           {NAV.map(({ href, label, Icon }) => (
             <Link key={href} href={href} className={pathname === href ? "active" : ""}>
@@ -153,10 +168,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </Link>
           ))}
         </nav>
+
         <div className="sb-footer">
           <span style={{ color: planCfg.color, fontSize: 11, fontWeight: 700 }}>{planCfg.label} Plan</span>
           <Link href="/billing" className="sb-upgrade">Upgrade</Link>
         </div>
+
+        {/* ── Logout button ── */}
+        <button className="sb-logout-btn" onClick={handleLogout}>
+          <LogOut size={14} strokeWidth={1.8} />
+          Logout
+        </button>
+
       </div>
 
       {/* Page content */}
@@ -180,12 +203,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           position:fixed;left:0;top:0;
           width:240px;height:100%;
           background:#06102a;
-          padding:22px 14px;
+          padding:16px 14px;
           transition:left .3s ease;
           z-index:1000;
           border-right:1px solid rgba(0,255,153,.07);
           display:flex;flex-direction:column;
         }
+
+        /* Back to Homepage link */
+        .sb-home-link{
+          display:flex;align-items:center;gap:6px;
+          color:#8899bb;font-size:11px;text-decoration:none;
+          padding:6px 8px;border-radius:7px;
+          border:1px solid rgba(255,255,255,.06);
+          margin-bottom:14px;
+          transition:.2s;
+          width:fit-content;
+        }
+        .sb-home-link:hover{color:#00ff99;border-color:rgba(0,255,153,.2);background:rgba(0,255,153,.05);}
+
         .sb-logo{display:flex;align-items:center;gap:9px;margin-bottom:24px;padding:0 4px;color:#00ff99;font-size:17px;font-weight:700;}
         .logo-dot{width:8px;height:8px;border-radius:50%;background:#00ff99;box-shadow:0 0 8px #00ff99;flex-shrink:0;}
         nav{display:flex;flex-direction:column;gap:2px;flex:1;}
@@ -194,6 +230,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         .sb-footer{margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;}
         .sb-upgrade{font-size:11px;color:#00ff99;text-decoration:none;background:rgba(0,255,153,.1);padding:4px 10px;border-radius:20px;border:1px solid rgba(0,255,153,.2);}
         .sb-upgrade:hover{background:rgba(0,255,153,.2);}
+
+        /* Logout button */
+        .sb-logout-btn{
+          display:flex;align-items:center;gap:8px;
+          width:100%;margin-top:10px;
+          padding:9px 10px;border-radius:8px;
+          background:none;border:none;
+          color:#ff6b6b;font-size:13px;cursor:pointer;
+          transition:.2s;text-align:left;
+        }
+        .sb-logout-btn:hover{background:rgba(255,107,107,.1);color:#ff8f8f;}
 
         /* Close btn inside sidebar — desktop mein hidden */
         .sb-close-btn{display:none;margin-left:auto;background:none;border:none;color:#8899bb;cursor:pointer;padding:4px;border-radius:6px;transition:.2s;flex-shrink:0;}
@@ -208,7 +255,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
 
         /* ── Page wrapper ── */
-.page-wrapper{min-height:100vh;position:relative;z-index:1;}
+        .page-wrapper{min-height:100vh;position:relative;z-index:1;}
         .main{padding:20px;min-height:100vh;}
 
         /* ── Mobile ── */
