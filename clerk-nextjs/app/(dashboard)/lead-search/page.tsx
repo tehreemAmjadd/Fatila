@@ -490,6 +490,7 @@ export default function LeadSearchPage() {
                   <span className="job-paid-badge"><Lock size={9}/>Paid Feature</span>
                 </h2>
                 <p>Describe the job you're looking for — get current listings with direct apply links</p>
+                <p className="job-dev-notice">⚠️ Under Development — May provide incorrect results</p>
               </div>
             </div>
           </div>
@@ -797,6 +798,7 @@ export default function LeadSearchPage() {
         }
         .job-section-title h2{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:4px;}
         .job-section-title p{font-size:13px;color:#8899bb;}
+        .job-dev-notice{font-size:11px;color:#ffd700;margin-top:4px;background:rgba(255,215,0,.08);border:1px solid rgba(255,215,0,.2);display:inline-block;padding:2px 10px;border-radius:20px;}
         .job-ai-badge{
           display:inline-flex;align-items:center;gap:4px;
           font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;
