@@ -13,7 +13,7 @@ import {
 const NAV = [
   { href:"/dashboard",    label:"Dashboard",    Icon:LayoutDashboard },
   { href:"/ai-assistant", label:"AI Assistant", Icon:Bot },
-  { href:"/lead-search",  label:"Lead Search",  Icon:Search },
+  { href:"/lead-search",  label:"Lead Search/Jobs Search",  Icon:Search },
   { href:"/saved-leads",  label:"Saved Leads",  Icon:Bookmark },
   { href:"/emails",       label:"Emails",       Icon:Mail },
   { href:"/calls",        label:"Calls",        Icon:Phone },
