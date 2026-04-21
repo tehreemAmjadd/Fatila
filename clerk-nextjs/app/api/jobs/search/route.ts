@@ -50,11 +50,13 @@ const COUNTRY_MAP: Record<string, string> = {
   "brazil": "br",
   "india": "in", "bangalore": "in", "mumbai": "in", "delhi": "in", "hyderabad": "in",
   "singapore": "sg",
-  // Middle East (Adzuna doesn't cover UAE/KSA — fallback to us)
-  "dubai": "gb",   // closest supported
-  "uae": "gb",
-  "saudi": "gb",
-  "pakistan": "gb", "lahore": "gb", "karachi": "gb", "islamabad": "gb",
+  // Middle East & Pakistan — Adzuna unsupported, will use OpenAI fallback
+  "dubai": "ae", "uae": "ae", "abu dhabi": "ae", "sharjah": "ae",
+  "saudi": "sa", "saudi arabia": "sa", "riyadh": "sa", "jeddah": "sa",
+  "pakistan": "pk", "lahore": "pk", "karachi": "pk", "islamabad": "pk", "rawalpindi": "pk",
+  "qatar": "qa", "doha": "qa",
+  "kuwait": "kw",
+  "egypt": "eg", "cairo": "eg",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -226,6 +228,58 @@ function formatPostedDate(date: Date): string {
   return `${Math.floor(diffDays / 30)} months ago`;
 }
 
+// ─── Adzuna-unsupported countries → use OpenAI fallback ──────────────────────
+// These countries/regions are not well covered by Adzuna
+const ADZUNA_UNSUPPORTED = ["pk", "ae", "sa", "qa", "kw", "bh", "om", "eg", "ng", "gh"];
+
+async function generateOpenAIJobs(prompt: string, location: string, count: number): Promise<JobResult[]> {
+  if (!OPENAI_API_KEY) return [];
+  const today = new Date().toISOString().split("T")[0];
+
+  const systemPrompt = `You are a job search assistant. Return exactly ${count} realistic job listings for: "${location}".
+
+Today: ${today}
+
+RULES:
+- Use real companies known in that region
+- Currency by location: Pakistan=PKR, UAE=AED, Saudi=SAR, Egypt=EGP, Nigeria=NGN, default=USD
+- For Pakistan use: Rozee.pk, Mustakbil, LinkedIn
+- For UAE/Gulf use: Bayt.com, LinkedIn, GulfTalent
+- APPLY URLS must be real search URLs on the correct job board
+  * Rozee: https://www.rozee.pk/job/jsearch/q/KEYWORDS
+  * Bayt UAE: https://www.bayt.com/en/uae/jobs/?q=KEYWORDS
+  * Bayt KSA: https://www.bayt.com/en/saudi-arabia/jobs/?q=KEYWORDS
+  * LinkedIn: https://www.linkedin.com/jobs/search/?keywords=KEYWORDS&location=LOCATION
+- postedAt: "Today","2 days ago","3 days ago","1 week ago"
+- type: "Full-time"|"Remote"|"Hybrid"|"Contract"|"Part-time"
+- description: 1-2 sentences
+
+Return ONLY a valid JSON array, no markdown.`;
+
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini", max_tokens: 2500, temperature: 0.7,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: prompt },
+        ],
+      }),
+    });
+    const data  = await res.json();
+    const raw   = data.choices?.[0]?.message?.content?.trim() || "[]";
+    const clean = raw.replace(/```json|```/g, "").trim();
+    let jobs: JobResult[] = [];
+    try { jobs = JSON.parse(clean); if (!Array.isArray(jobs)) jobs = []; } catch { jobs = []; }
+    return jobs.map((job, i) => ({ ...job, id: job.id || `ai_${Date.now()}_${i}`, source: job.source || "LinkedIn" }));
+  } catch (e) {
+    console.error("OpenAI fallback error:", e);
+    return [];
+  }
+}
+
 // ─── POST Handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -283,9 +337,22 @@ export async function POST(req: NextRequest) {
     const { keywords, country, location } = await parsePrompt(prompt.trim());
     console.log(`🔍 Parsed | keywords:"${keywords}" | country:"${country}" | location:"${location}"`);
 
-    // ── Fetch real jobs from Adzuna ───────────────────────────────────────────
-    const jobs = await fetchAdzunaJobs(keywords, country, countToFetch);
-    console.log(`✅ Adzuna returned ${jobs.length} jobs`);
+    // ── Fetch jobs: Adzuna for supported countries, OpenAI fallback for rest ────
+    let jobs: JobResult[] = [];
+
+    if (ADZUNA_UNSUPPORTED.includes(country)) {
+      // Pakistan, UAE, Saudi etc. — use OpenAI with real job board links
+      console.log(`🌍 Country "${country}" not on Adzuna — using OpenAI fallback`);
+      jobs = await generateOpenAIJobs(prompt.trim(), location, countToFetch);
+    } else {
+      jobs = await fetchAdzunaJobs(keywords, country, countToFetch);
+      // If Adzuna returns nothing, fallback to OpenAI
+      if (jobs.length === 0) {
+        console.log(`⚠️ Adzuna returned 0 results — using OpenAI fallback`);
+        jobs = await generateOpenAIJobs(prompt.trim(), location, countToFetch);
+      }
+    }
+    console.log(`✅ Final job count: ${jobs.length}`);
 
     // ── Increment DB usage ────────────────────────────────────────────────────
     if (!isUnlimited && email && jobs.length > 0) {

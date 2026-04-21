@@ -137,7 +137,7 @@ export default function LeadSearchPage() {
     business: Infinity,
   };
   const TRIAL_JOB_LIMIT    = 20;
-  const canUseJobSearch    = isAdmin || ["trial","starter","pro","business"].includes(effectivePlan);
+  const canUseJobSearch    = isAdmin || ["trial","starter","pro","business"].includes(effectivePlan) && effectivePlan !== "free" && effectivePlan !== "expired";
   const isJobSearchLimited = !isAdmin && ["trial","starter","pro"].includes(effectivePlan);
   const jobLimit           = isAdmin ? Infinity : (JOB_LIMITS_BY_PLAN[effectivePlan] ?? 0);
   // Derive jobLimitReached from DB-synced usage + plan limit
