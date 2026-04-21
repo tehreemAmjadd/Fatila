@@ -25,7 +25,7 @@ const PLANS = [
   {
     name:"Starter", targetUsers:"Freelancers & Solo Sellers",
     monthlyUSD:12, yearlyUSD:10, monthlyPKR:"3,300", yearlyPKR:"2,750",
-    priceId:"price_1TGxXyFE3BY4oFrRoLc9B1d1", plan:"starter", popular:false,
+    priceId:"price_1TOEmb2UPbx90aHbwl2mc2Zt", plan:"starter", popular:false,
     features:[
       {ok:true,  text:"100 leads / month"},
       {ok:true,  text:"Lead Search (Google Places)"},
@@ -42,7 +42,7 @@ const PLANS = [
   {
     name:"Professional", targetUsers:"Small Agencies & Sales Reps",
     monthlyUSD:29, yearlyUSD:24, monthlyPKR:"8,000", yearlyPKR:"6,600",
-    priceId:"price_1TGxaBFE3BY4oFrR3uXGtOXa", plan:"pro", popular:true,
+    priceId:"price_1TOEma2UPbx90aHbSWNWaevl", plan:"pro", popular:true,
     features:[
       {ok:true,  text:"1,000 leads / month"},
       {ok:true,  text:"Lead Search with all filters"},
@@ -59,7 +59,7 @@ const PLANS = [
   {
     name:"Business", targetUsers:"Sales Teams & Agencies",
     monthlyUSD:59, yearlyUSD:49, monthlyPKR:"16,500", yearlyPKR:"13,500",
-    priceId:"price_1TGxaZFE3BY4oFrRcA9BPQLq", plan:"business", popular:false,
+    priceId:"price_1TOEmd2UPbx90aHbWxNaqJPa", plan:"business", popular:false,
     features:[
       {ok:true, text:"Unlimited leads / month"},
       {ok:true, text:"Lead Search with all filters"},
