@@ -109,7 +109,7 @@ export default function LeadSearchPage() {
       // Sync jobResultsUsed from DB so cumulative count survives page reloads
       const usedFromDb = Number(uData?.jobResultsUsed ?? 0);
       setJobResultsUsed(usedFromDb);
-      if (usedFromDb >= 20) setJobLimitReached(true);
+      // jobLimitReached is re-evaluated after plan is known (see derived constants)
     } catch(e) { console.error(e); }
   }, [email]);
 
@@ -125,13 +125,23 @@ export default function LeadSearchPage() {
   const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
   // ── Job Search plan gating ────────────────────────────────────────────────
-  // free/expired → blocked (paid feature gate)
-  // trial        → allowed, cumulative 20 results max across all searches
-  // starter/pro/business/admin → full access
+  // free/expired  → blocked
+  // trial         → 20 total results (lifetime)
+  // starter       → 100 results / month
+  // pro           → 500 results / month
+  // business/admin→ unlimited
+  const JOB_LIMITS_BY_PLAN: Record<string,number> = {
+    trial:    20,
+    starter:  100,
+    pro:      500,
+    business: Infinity,
+  };
   const TRIAL_JOB_LIMIT    = 20;
   const canUseJobSearch    = isAdmin || ["trial","starter","pro","business"].includes(effectivePlan);
-  const isJobSearchLimited = !isAdmin && effectivePlan === "trial";
-  // jobLimitReached is set from API response — checked before each search too
+  const isJobSearchLimited = !isAdmin && ["trial","starter","pro"].includes(effectivePlan);
+  const jobLimit           = isAdmin ? Infinity : (JOB_LIMITS_BY_PLAN[effectivePlan] ?? 0);
+  // Derive jobLimitReached from DB-synced usage + plan limit
+  const derivedLimitReached = isJobSearchLimited && jobLimit !== Infinity && jobResultsUsed >= jobLimit;
 
   // ── Lead Search ───────────────────────────────────────────────────────────
   const handleSearch = async () => {
@@ -160,7 +170,7 @@ export default function LeadSearchPage() {
   const handleJobSearch = async () => {
     if (!canUseJobSearch || !jobPrompt.trim()) return;
     // Block on client side if limit already reached
-    if (isJobSearchLimited && jobLimitReached) return;
+    if (isJobSearchLimited && (jobLimitReached || derivedLimitReached)) return;
 
     setJobLoading(true);
     setJobSearched(true);
@@ -173,7 +183,7 @@ export default function LeadSearchPage() {
         body: JSON.stringify({
           prompt: jobPrompt,
           email,
-          isTrial: isJobSearchLimited,
+          plan: effectivePlan,
         }),
       });
 
@@ -498,11 +508,11 @@ export default function LeadSearchPage() {
               {isJobSearchLimited && (
                 <div className="job-trial-banner">
                   <Zap size={13} color="#ffd700"/>
-                  <span>Trial — <strong>{jobResultsUsed} / {TRIAL_JOB_LIMIT}</strong> job results used</span>
+                  <span><strong>{jobResultsUsed} / {jobLimit === Infinity ? "∞" : jobLimit}</strong> job results used</span>
                   <div className="job-usage-track">
                     <div className="job-usage-fill" style={{
                       width:`${Math.min((jobResultsUsed/TRIAL_JOB_LIMIT)*100,100)}%`,
-                      background: jobLimitReached ? "#ff6b6b" : jobResultsUsed/TRIAL_JOB_LIMIT >= 0.8 ? "#ff9900" : "#ffd700",
+                      background: (jobLimitReached||derivedLimitReached) ? "#ff6b6b" : jobResultsUsed/jobLimit >= 0.8 ? "#ff9900" : "#ffd700",
                     }}/>
                   </div>
                   <a href="/billing">Upgrade for unlimited</a>
@@ -510,7 +520,7 @@ export default function LeadSearchPage() {
               )}
 
               {/* ── SEARCH BAR or LIMIT GATE ── */}
-              {isJobSearchLimited && jobLimitReached ? (
+              {isJobSearchLimited && (jobLimitReached || derivedLimitReached) ? (
                 <div className="job-limit-banner">
                   <Lock size={14} color="#ff6b6b"/>
                   <span>You've used all <strong>20 job results</strong> in your trial.</span>
