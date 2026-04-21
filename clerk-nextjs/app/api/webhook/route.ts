@@ -78,9 +78,9 @@ export async function POST(req: Request) {
 
       if (user) {
        const PRICE_PLAN_MAP: any = {
-  "price_1TGxXyFE3BY4oFrRoLc9B1d1": "starter",
-  "price_1TGxaBFE3BY4oFrR3uXGtOXa": "pro",
-  "price_1TGxaZFE3BY4oFrRcA9BPQLq": "business",
+  "price_1TOEmb2UPbx90aHbwl2mc2Zt": "starter",
+  "price_1TOEma2UPbx90aHbSWNWaevl": "pro",
+  "price_1TOEmd2UPbx90aHbWxNaqJPa": "business",
 };
 
 const priceId = subscription.items.data[0].price.id;
