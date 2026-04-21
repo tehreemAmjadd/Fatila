@@ -43,13 +43,16 @@ function buildJobBoardUrls(query: string): Record<string, string> {
  * its training knowledge + the current date context, and construct proper apply
  * URLs pointing to actual job boards.
  */
-async function generateJobResults(prompt: string): Promise<JobResult[]> {
-  const today = new Date().toISOString().split("T")[0]; // e.g. 2026-04-21
+async function generateJobResults(prompt: string, limit: number = 100): Promise<JobResult[]> {
+  const today = new Date().toISOString().split("T")[0];
+  const count = Math.min(limit, 10); // trial gets max 10, paid gets up to 10 good quality results
 
   const systemPrompt = `You are a job search assistant. A user will describe the type of job they are looking for.
 Your task is to return a JSON array of realistic, currently-available job listings that match their query.
 
 Today's date is ${today}.
+
+Return exactly ${count} job listings (or fewer if the query is very niche).
 
 For each job listing:
 - Use real company names that are known to hire for this type of role (e.g. Devsinc, Systems Ltd, NetSol, MTBC, Folio3, Arbisoft, 10Pearls, Careem, Daraz, i2c, etc. for Pakistan tech jobs)
@@ -65,7 +68,6 @@ For each job listing:
 - Set source to the job board name: "LinkedIn", "Indeed", "Rozee.pk", "Glassdoor", "Bayt"
 
 Return ONLY a valid JSON array. No markdown, no explanation, no code fences.
-Return between 6 and 10 job listings.
 
 Example format:
 [
@@ -138,7 +140,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { prompt } = await req.json();
+    const { prompt, limit = 100 } = await req.json();
 
     if (!prompt || !String(prompt).trim()) {
       return NextResponse.json(
@@ -147,9 +149,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log("🔍 Job search prompt:", prompt);
+    console.log("🔍 Job search prompt:", prompt, "| limit:", limit);
 
-    const jobs = await generateJobResults(String(prompt).trim());
+    const jobs = await generateJobResults(String(prompt).trim(), Number(limit));
 
     console.log(`✅ Returned ${jobs.length} job listings`);
 
