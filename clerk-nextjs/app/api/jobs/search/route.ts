@@ -103,10 +103,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please provide a job search prompt.", jobs: [] }, { status: 400 });
     }
 
-    const planLimit = PLAN_JOB_LIMITS[plan] ?? 0;
+    // Normalize plan — treat admin role or business plan as unlimited
+    const normalizedPlan = (plan === "admin" || plan === "business") ? "business" : plan;
+    const planLimit = PLAN_JOB_LIMITS[normalizedPlan] ?? 0;
 
     // ── Unlimited plans (business / admin) — skip all tracking ───────────────
-    if (planLimit === Infinity) {
+    if (!isFinite(planLimit) || planLimit >= 999999) {
       const jobs = await generateJobResults(prompt.trim(), 10);
       return NextResponse.json({ jobs, total: jobs.length, jobResultsUsed: null, jobResultsLimit: null, limitReached: false });
     }

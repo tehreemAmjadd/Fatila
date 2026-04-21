@@ -183,7 +183,7 @@ export default function LeadSearchPage() {
         body: JSON.stringify({
           prompt: jobPrompt,
           email,
-          plan: effectivePlan,
+          plan: isAdmin ? "admin" : effectivePlan,
         }),
       });
 
