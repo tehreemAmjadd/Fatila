@@ -600,7 +600,17 @@ export default function LeadSearchPage() {
                                 </div>
                               </div>
                             </div>
-                            <a href={job.applyUrl} target="_blank" rel="noreferrer" className="job-apply-btn">
+                            <a
+                              href={job.applyUrl && job.applyUrl !== "#" ? job.applyUrl : undefined}
+                              onClick={job.applyUrl && job.applyUrl !== "#"
+                                ? (e) => { e.preventDefault(); window.open(job.applyUrl, "_blank", "noopener,noreferrer"); }
+                                : undefined
+                              }
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`job-apply-btn ${!job.applyUrl || job.applyUrl === "#" ? "btn-disabled" : ""}`}
+                              style={!job.applyUrl || job.applyUrl === "#" ? {opacity:0.4, cursor:"not-allowed"} : {}}
+                            >
                               Apply <ChevronRight size={14}/>
                             </a>
                           </div>

@@ -157,6 +157,15 @@ async function fetchAdzunaJobs(keywords: string, country: string, count: number)
     const data = await res.json();
     const results = data?.results || [];
 
+    // Debug: log first job's URL fields to verify what Adzuna returns
+    if (results.length > 0) {
+      console.log("Adzuna job URL fields:", {
+        redirect_url: results[0]?.redirect_url,
+        adref: results[0]?.adref,
+        url: results[0]?.url,
+      });
+    }
+
     return results.map((job: any, i: number): JobResult => {
       // Salary formatting
       let salary: string | undefined;
@@ -192,7 +201,8 @@ async function fetchAdzunaJobs(keywords: string, country: string, count: number)
         description: job.description
           ? job.description.replace(/<[^>]*>/g, "").slice(0, 200).trim() + "..."
           : "Click Apply to view full job description.",
-        applyUrl:    job.redirect_url || job.adref || "#",  // ← REAL direct apply URL
+        // Adzuna gives redirect_url (tracking link) — use it but also keep adref as backup
+        applyUrl:    job.redirect_url || job.adref || job.url || "#",
         source:      "Adzuna",
         salary,
       };
@@ -273,7 +283,19 @@ Return ONLY a valid JSON array, no markdown.`;
     const clean = raw.replace(/```json|```/g, "").trim();
     let jobs: JobResult[] = [];
     try { jobs = JSON.parse(clean); if (!Array.isArray(jobs)) jobs = []; } catch { jobs = []; }
-    return jobs.map((job, i) => ({ ...job, id: job.id || `ai_${Date.now()}_${i}`, source: job.source || "LinkedIn" }));
+    return jobs.map((job, i) => {
+      // Make sure source matches the actual URL domain
+      let source = job.source || "LinkedIn";
+      const url = (job.applyUrl || "").toLowerCase();
+      if (url.includes("rozee.pk"))   source = "Rozee.pk";
+      else if (url.includes("bayt"))  source = "Bayt";
+      else if (url.includes("linkedin")) source = "LinkedIn";
+      else if (url.includes("indeed"))   source = "Indeed";
+      else if (url.includes("glassdoor")) source = "Glassdoor";
+      else if (url.includes("mustakbil")) source = "Mustakbil";
+      else if (url.includes("naukri"))    source = "Naukri";
+      return { ...job, id: job.id || `ai_${Date.now()}_${i}`, source };
+    });
   } catch (e) {
     console.error("OpenAI fallback error:", e);
     return [];
