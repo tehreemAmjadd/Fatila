@@ -6,6 +6,7 @@ import {
   Search, Bookmark, MapPin, Globe, Star, Lock,
   ExternalLink, AlertTriangle, Zap,
   RefreshCw, Filter, Bot, Mail, Phone,
+  Briefcase, Send, ChevronRight, Building2, Clock,
 } from "lucide-react";
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
@@ -44,6 +45,19 @@ interface LeadResult {
   fromCache?: boolean;
 }
 
+interface JobResult {
+  id: string;
+  title: string;
+  company: string;
+  location: string;
+  type: string;        // Full-time, Remote, etc.
+  postedAt: string;
+  description: string;
+  applyUrl: string;
+  source: string;      // LinkedIn, Indeed, etc.
+  salary?: string;
+}
+
 export default function LeadSearchPage() {
   const { user } = useUser();
 
@@ -61,6 +75,13 @@ export default function LeadSearchPage() {
   const [savingId,  setSavingId]  = useState<string|null>(null);
   const [saveError, setSaveError] = useState("");
 
+  // Job Search
+  const [jobPrompt,    setJobPrompt]    = useState("");
+  const [jobResults,   setJobResults]   = useState<JobResult[]>([]);
+  const [jobLoading,   setJobLoading]   = useState(false);
+  const [jobSearched,  setJobSearched]  = useState(false);
+  const [jobError,     setJobError]     = useState("");
+
   // Plan
   const [dbUser,     setDbUser]     = useState<any>(null);
   const [leadsCount, setLeadsCount] = useState<number>(0);
@@ -70,7 +91,6 @@ export default function LeadSearchPage() {
   const fetchUser = useCallback(async () => {
     if (!email) return;
     try {
-      // Fetch user info AND dashboard stats in parallel (same as dashboard page)
       const [uRes, sRes] = await Promise.all([
         fetch("/api/get-user",        { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) }),
         fetch("/api/dashboard/stats", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) }),
@@ -78,7 +98,6 @@ export default function LeadSearchPage() {
       const uData = await uRes.json();
       const sData = await sRes.json();
       setDbUser(uData);
-      // Parse totalLeads safely from stats (same logic as dashboard)
       const raw = sData?.totalLeads ?? uData?.totalLeads ?? uData?.leadsUsed ?? 0;
       const count = typeof raw === "number" ? raw
                   : Array.isArray(raw)       ? raw.length
@@ -87,21 +106,18 @@ export default function LeadSearchPage() {
     } catch(e) { console.error(e); }
   }, [email]);
 
-  useEffect(() => {
-    fetchUser();
-  }, [fetchUser]);
+  useEffect(() => { fetchUser(); }, [fetchUser]);
 
   // ── Derived plan info ─────────────────────────────────────────────────────
   const isAdmin       = dbUser?.role === "admin";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey) || "free");
   const planCfg       = isAdmin ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
-  // Free plan users CAN search (they have 50 lead limit), only expired users are blocked
   const canSearch     = isAdmin || effectivePlan !== "expired";
   const leadsUsed     = leadsCount;
   const leadsMax      = planCfg.leadsMax;
   const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
-  // ── Search ────────────────────────────────────────────────────────────────
+  // ── Lead Search ───────────────────────────────────────────────────────────
   const handleSearch = async () => {
     if (!canSearch || atLimit) return;
     if (!location && !keyword) {
@@ -119,10 +135,33 @@ export default function LeadSearchPage() {
       });
       const data = await res.json();
       setResults(data.leads || []);
-      // Re-fetch user to update lead usage count in progress bar
       await fetchUser();
     } catch(err) { console.error(err); setResults([]); }
     finally { setLoading(false); }
+  };
+
+  // ── Job Search ────────────────────────────────────────────────────────────
+  const handleJobSearch = async () => {
+    if (!jobPrompt.trim()) return;
+    setJobLoading(true);
+    setJobSearched(true);
+    setJobError("");
+    setJobResults([]);
+    try {
+      const res = await fetch("/api/jobs/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: jobPrompt }),
+      });
+      const data = await res.json();
+      if (data.error) { setJobError(data.error); }
+      else { setJobResults(data.jobs || []); }
+    } catch (err) {
+      console.error(err);
+      setJobError("Something went wrong. Please try again.");
+    } finally {
+      setJobLoading(false);
+    }
   };
 
   // ── Save lead ─────────────────────────────────────────────────────────────
@@ -211,7 +250,6 @@ export default function LeadSearchPage() {
               <h3>Search Filters</h3>
             </div>
             <div className="filters-grid">
-
               <div className="filter-group">
                 <label>Location <span className="req">*</span></label>
                 <input value={location} onChange={e=>setLocation(e.target.value)}
@@ -236,7 +274,6 @@ export default function LeadSearchPage() {
               </div>
             </div>
 
-            {/* Lead usage bar */}
             {leadsMax !== Infinity && (
               <div className="usage-row">
                 <span className="usage-lbl">
@@ -268,7 +305,7 @@ export default function LeadSearchPage() {
           </div>
         )}
 
-        {/* ── RESULTS ── */}
+        {/* ── LEAD RESULTS ── */}
         {searched && canSearch && (
           <div className="results-section">
             <div className="results-hdr">
@@ -300,8 +337,6 @@ export default function LeadSearchPage() {
                   const isSaving  = savingId === lead.placeId;
                   return (
                     <div key={lead.placeId} className={`lead-card ${isSaved?"saved":""}`}>
-
-                      {/* Card header */}
                       <div className="card-top">
                         <div className="company-avatar">{lead.company.charAt(0).toUpperCase()}</div>
                         <div className="company-info">
@@ -314,7 +349,6 @@ export default function LeadSearchPage() {
                         </div>
                       </div>
 
-                      {/* Priority */}
                       <div className="priority-row">
                         <span className="priority-badge"
                           style={{color:PRIORITY_COLOR[lead.priority],background:priorityBg(lead.priority),border:`1px solid ${PRIORITY_COLOR[lead.priority]}33`}}>
@@ -331,7 +365,6 @@ export default function LeadSearchPage() {
                         )}
                       </div>
 
-                      {/* Contact details */}
                       <div className="contact-list">
                         {lead.address && (
                           <div className="contact-row">
@@ -361,7 +394,6 @@ export default function LeadSearchPage() {
                         )}
                       </div>
 
-                      {/* AI Insight */}
                       {lead.aiInsight && (
                         <div className="ai-insight">
                           <div className="insight-label"><Bot size={12} color="#00ff99"/>AI Insight</div>
@@ -369,7 +401,6 @@ export default function LeadSearchPage() {
                         </div>
                       )}
 
-                      {/* Actions */}
                       <div className="card-actions">
                         <button
                           className={`save-btn ${isSaved?"saved":""}`}
@@ -392,10 +423,114 @@ export default function LeadSearchPage() {
             )}
           </div>
         )}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* ── JOB SEARCH SECTION ─────────────────────────────────────────── */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        <div className="job-section">
+          <div className="job-section-header">
+            <div className="job-section-title">
+              <div className="job-icon-wrap"><Briefcase size={16} color="#3b9eff"/></div>
+              <div>
+                <h2>Job Search <span className="job-ai-badge"><Bot size={10}/>AI-Powered</span></h2>
+                <p>Describe the job you're looking for — get current listings with direct apply links</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="job-search-bar">
+            <div className="job-input-wrap">
+              <Search size={15} color="#8899bb" className="job-search-icon"/>
+              <input
+                className="job-input"
+                value={jobPrompt}
+                onChange={e => setJobPrompt(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && handleJobSearch()}
+                placeholder='e.g. "React developer jobs in Lahore", "Remote Python engineer Pakistan"'
+              />
+            </div>
+            <button className="job-search-btn" onClick={handleJobSearch} disabled={jobLoading || !jobPrompt.trim()}>
+              {jobLoading
+                ? <><RefreshCw size={14} className="spin"/>Searching...</>
+                : <><Send size={14}/>Find Jobs</>
+              }
+            </button>
+          </div>
+
+          {/* Job error */}
+          {jobError && (
+            <div className="error-banner" style={{marginTop:"12px"}}>
+              <AlertTriangle size={14} color="#ff6b6b"/>{jobError}
+            </div>
+          )}
+
+          {/* Job results */}
+          {jobSearched && (
+            <div className="job-results-section">
+              <div className="results-hdr" style={{marginBottom:"14px"}}>
+                <h2>
+                  {jobLoading
+                    ? "Searching for jobs..."
+                    : jobResults.length > 0
+                      ? `${jobResults.length} job${jobResults.length !== 1 ? "s" : ""} found`
+                      : "No jobs found"}
+                </h2>
+              </div>
+
+              {jobLoading ? (
+                <div className="job-skeleton-list">
+                  {[...Array(3)].map((_,i) => <div key={i} className="job-skeleton-card"/>)}
+                </div>
+              ) : jobResults.length === 0 && !jobError ? (
+                <div className="no-results">
+                  <Briefcase size={32} color="#8899bb" strokeWidth={1.4}/>
+                  <p>No jobs found. Try rephrasing your search.</p>
+                </div>
+              ) : (
+                <div className="job-list">
+                  {jobResults.map(job => (
+                    <div key={job.id} className="job-card">
+                      <div className="job-card-left">
+                        <div className="job-avatar">
+                          {job.company.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="job-info">
+                          <h3 className="job-title">{job.title}</h3>
+                          <div className="job-meta">
+                            <span className="job-meta-item"><Building2 size={11}/>{job.company}</span>
+                            {job.location && <span className="job-meta-item"><MapPin size={11}/>{job.location}</span>}
+                            {job.type && <span className="job-type-badge">{job.type}</span>}
+                            {job.salary && <span className="job-salary">{job.salary}</span>}
+                          </div>
+                          <p className="job-desc">{job.description}</p>
+                          <div className="job-footer">
+                            {job.postedAt && (
+                              <span className="job-posted"><Clock size={10}/>{job.postedAt}</span>
+                            )}
+                            <span className="job-source">via {job.source}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <a
+                        href={job.applyUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="job-apply-btn"
+                      >
+                        Apply <ChevronRight size={14}/>
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        {/* ══════════════════════════════════════════════════════════════════ */}
+
       </div>
 
       <style jsx>{`
-        /* ── Main layout — sidebar 240px, content takes remaining width ── */
         .main{
           margin-left:240px;
           padding:20px 24px;
@@ -472,7 +607,6 @@ export default function LeadSearchPage() {
 
         .no-results{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px;color:#8899bb;font-size:14px;}
 
-        /* ── Results grid — two equal columns, each takes 50% of available width ── */
         .results-grid{
           display:grid;
           grid-template-columns:repeat(2,minmax(0,1fr));
@@ -531,6 +665,96 @@ export default function LeadSearchPage() {
         .li-btn{display:flex;align-items:center;gap:5px;padding:8px 12px;border-radius:9px;border:1px solid rgba(0,119,181,.3);background:rgba(0,119,181,.1);color:#0077b5;font-size:12px;font-weight:600;text-decoration:none;transition:.2s;white-space:nowrap;}
         .li-btn:hover{background:rgba(0,119,181,.2);}
 
+        /* ══════════════════════════════════════════════════════════════ */
+        /* JOB SEARCH STYLES                                             */
+        /* ══════════════════════════════════════════════════════════════ */
+
+        .job-section{
+          margin-top:32px;
+          background:rgba(255,255,255,.02);
+          border:1px solid rgba(59,158,255,.15);
+          border-radius:16px;
+          padding:22px 22px 26px;
+        }
+
+        .job-section-header{margin-bottom:18px;}
+        .job-section-title{display:flex;align-items:flex-start;gap:12px;}
+        .job-icon-wrap{
+          width:36px;height:36px;border-radius:10px;
+          background:rgba(59,158,255,.1);border:1px solid rgba(59,158,255,.2);
+          display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;
+        }
+        .job-section-title h2{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+        .job-section-title p{font-size:13px;color:#8899bb;}
+        .job-ai-badge{
+          display:inline-flex;align-items:center;gap:4px;
+          font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;
+          background:rgba(59,158,255,.12);border:1px solid rgba(59,158,255,.25);color:#3b9eff;
+        }
+
+        /* Job search bar */
+        .job-search-bar{display:flex;gap:10px;align-items:center;}
+        .job-input-wrap{
+          flex:1;position:relative;display:flex;align-items:center;
+          background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+          border-radius:30px;padding:0 14px;transition:.2s;
+        }
+        .job-input-wrap:focus-within{border-color:rgba(59,158,255,.4);}
+        .job-search-icon{flex-shrink:0;margin-right:8px;}
+        .job-input{
+          flex:1;background:transparent;border:none;outline:none;
+          color:white;font-size:13px;font-family:'Inter',sans-serif;
+          padding:10px 0;
+        }
+        .job-input::placeholder{color:#8899bb;}
+        .job-search-btn{
+          display:flex;align-items:center;gap:7px;
+          background:#3b9eff;color:#fff;border:none;
+          padding:10px 22px;border-radius:30px;
+          font-size:14px;font-weight:700;cursor:pointer;transition:.2s;white-space:nowrap;
+          flex-shrink:0;
+        }
+        .job-search-btn:hover:not(:disabled){background:#2280e0;}
+        .job-search-btn:disabled{opacity:.6;cursor:not-allowed;}
+
+        /* Job results */
+        .job-results-section{margin-top:20px;}
+        .job-skeleton-list{display:flex;flex-direction:column;gap:10px;}
+        .job-skeleton-card{height:90px;border-radius:12px;background:rgba(255,255,255,.04);animation:pulse 1.4s ease infinite;}
+
+        .job-list{display:flex;flex-direction:column;gap:10px;}
+        .job-card{
+          display:flex;align-items:center;justify-content:space-between;gap:14px;
+          background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);
+          border-radius:12px;padding:14px 16px;transition:.2s;
+        }
+        .job-card:hover{border-color:rgba(59,158,255,.25);background:rgba(59,158,255,.03);}
+        .job-card-left{display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;}
+        .job-avatar{
+          width:38px;height:38px;border-radius:10px;flex-shrink:0;
+          background:linear-gradient(135deg,#3b9eff,#0044aa);
+          color:#fff;font-weight:800;font-size:15px;
+          display:flex;align-items:center;justify-content:center;
+        }
+        .job-info{flex:1;min-width:0;}
+        .job-title{font-size:13px;font-weight:600;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .job-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
+        .job-meta-item{display:flex;align-items:center;gap:4px;font-size:11px;color:#8899bb;}
+        .job-type-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(0,255,153,.1);border:1px solid rgba(0,255,153,.2);color:#00ff99;}
+        .job-salary{font-size:11px;font-weight:600;color:#ffd700;}
+        .job-desc{font-size:11px;color:#8899bb;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin-bottom:6px;}
+        .job-footer{display:flex;align-items:center;gap:10px;}
+        .job-posted{display:flex;align-items:center;gap:4px;font-size:10px;color:#8899bb;}
+        .job-source{font-size:10px;color:#8899bb;background:rgba(255,255,255,.06);padding:2px 7px;border-radius:8px;}
+        .job-apply-btn{
+          display:flex;align-items:center;gap:4px;
+          background:rgba(59,158,255,.12);border:1px solid rgba(59,158,255,.25);
+          color:#3b9eff;font-size:12px;font-weight:700;
+          padding:8px 16px;border-radius:9px;text-decoration:none;
+          white-space:nowrap;transition:.2s;flex-shrink:0;
+        }
+        .job-apply-btn:hover{background:rgba(59,158,255,.22);color:#fff;}
+
         /* ── Responsive breakpoints ── */
         @media(max-width:1280px){
           .filters-grid{grid-template-columns:repeat(2,1fr);}
@@ -550,6 +774,8 @@ export default function LeadSearchPage() {
           .skeleton-grid{grid-template-columns:repeat(2,1fr);}
           .skeleton-card{height:180px;}
           .ai-insight p{-webkit-line-clamp:2;}
+          .job-search-bar{flex-direction:column;}
+          .job-search-btn{width:100%;justify-content:center;}
         }
         @media(max-width:600px){
           .main{padding:10px;width:100vw;}
@@ -561,6 +787,8 @@ export default function LeadSearchPage() {
           .card-actions{flex-direction:column;}
           .li-btn{justify-content:center;}
           .ai-insight{display:none;}
+          .job-card{flex-direction:column;align-items:flex-start;}
+          .job-apply-btn{width:100%;justify-content:center;}
         }
       `}</style>
     </>
