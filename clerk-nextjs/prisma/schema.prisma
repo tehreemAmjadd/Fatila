@@ -28,6 +28,7 @@ model User {
   tasks  Task[]
   emailLogs EmailLog[]
   callLogs  CallLog[]
+  jobResultsUsed  Int  @default(0)
 }
 
 model Lead {

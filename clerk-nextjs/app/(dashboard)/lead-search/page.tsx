@@ -76,11 +76,13 @@ export default function LeadSearchPage() {
   const [saveError, setSaveError] = useState("");
 
   // Job Search
-  const [jobPrompt,    setJobPrompt]    = useState("");
-  const [jobResults,   setJobResults]   = useState<JobResult[]>([]);
-  const [jobLoading,   setJobLoading]   = useState(false);
-  const [jobSearched,  setJobSearched]  = useState(false);
-  const [jobError,     setJobError]     = useState("");
+  const [jobPrompt,       setJobPrompt]       = useState("");
+  const [jobResults,      setJobResults]       = useState<JobResult[]>([]);
+  const [jobLoading,      setJobLoading]       = useState(false);
+  const [jobSearched,     setJobSearched]      = useState(false);
+  const [jobError,        setJobError]         = useState("");
+  const [jobResultsUsed,  setJobResultsUsed]   = useState(0);   // cumulative across all searches
+  const [jobLimitReached, setJobLimitReached]  = useState(false);
 
   // Plan
   const [dbUser,     setDbUser]     = useState<any>(null);
@@ -119,11 +121,12 @@ export default function LeadSearchPage() {
 
   // ── Job Search plan gating ────────────────────────────────────────────────
   // free/expired → blocked (paid feature gate)
-  // trial        → allowed, capped at 10 results shown
+  // trial        → allowed, cumulative 20 results max across all searches
   // starter/pro/business/admin → full access
+  const TRIAL_JOB_LIMIT    = 20;
   const canUseJobSearch    = isAdmin || ["trial","starter","pro","business"].includes(effectivePlan);
   const isJobSearchLimited = !isAdmin && effectivePlan === "trial";
-  const jobResultsLimit    = isJobSearchLimited ? 10 : 100;
+  // jobLimitReached is set from API response — checked before each search too
 
   // ── Lead Search ───────────────────────────────────────────────────────────
   const handleSearch = async () => {
@@ -151,6 +154,9 @@ export default function LeadSearchPage() {
   // ── Job Search ────────────────────────────────────────────────────────────
   const handleJobSearch = async () => {
     if (!canUseJobSearch || !jobPrompt.trim()) return;
+    // Block on client side if limit already reached
+    if (isJobSearchLimited && jobLimitReached) return;
+
     setJobLoading(true);
     setJobSearched(true);
     setJobError("");
@@ -159,13 +165,31 @@ export default function LeadSearchPage() {
       const res = await fetch("/api/jobs/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: jobPrompt, limit: jobResultsLimit }),
+        body: JSON.stringify({
+          prompt: jobPrompt,
+          email,
+          isTrial: isJobSearchLimited,
+        }),
       });
+
       const data = await res.json();
-      if (data.error) { setJobError(data.error); }
-      else {
-        // Enforce limit on client side too for safety
-        setJobResults((data.jobs || []).slice(0, jobResultsLimit));
+
+      if (res.status === 403 || data.limitReached) {
+        // Limit reached — update state, show gate
+        setJobLimitReached(true);
+        setJobResultsUsed(data.jobResultsUsed ?? TRIAL_JOB_LIMIT);
+        setJobResults([]);
+        return;
+      }
+
+      if (data.error) {
+        setJobError(data.error);
+      } else {
+        setJobResults(data.jobs || []);
+        if (isJobSearchLimited) {
+          setJobResultsUsed(data.jobResultsUsed ?? 0);
+          setJobLimitReached(data.limitReached ?? false);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -463,107 +487,123 @@ export default function LeadSearchPage() {
             </div>
           ) : (
             <>
-              {/* ── TRIAL NOTICE ── */}
+              {/* ── TRIAL USAGE BAR ── */}
               {isJobSearchLimited && (
                 <div className="job-trial-banner">
                   <Zap size={13} color="#ffd700"/>
-                  <span>Trial plan — showing up to <strong>10 results</strong> per search.</span>
+                  <span>Trial — <strong>{jobResultsUsed} / {TRIAL_JOB_LIMIT}</strong> job results used</span>
+                  <div className="job-usage-track">
+                    <div className="job-usage-fill" style={{
+                      width:`${Math.min((jobResultsUsed/TRIAL_JOB_LIMIT)*100,100)}%`,
+                      background: jobLimitReached ? "#ff6b6b" : jobResultsUsed/TRIAL_JOB_LIMIT >= 0.8 ? "#ff9900" : "#ffd700",
+                    }}/>
+                  </div>
                   <a href="/billing">Upgrade for unlimited</a>
                 </div>
               )}
 
-              <div className="job-search-bar">
-                <div className="job-input-wrap">
-                  <Search size={15} color="#8899bb" className="job-search-icon"/>
-                  <input
-                    className="job-input"
-                    value={jobPrompt}
-                    onChange={e => setJobPrompt(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleJobSearch()}
-                    placeholder='e.g. "React developer jobs in Lahore", "Remote Python engineer Pakistan"'
-                  />
+              {/* ── TRIAL LIMIT REACHED GATE ── */}
+              {isJobSearchLimited && jobLimitReached ? (
+                <div className="job-gate-box" style={{paddingTop:"28px",paddingBottom:"28px"}}>
+                  <div className="job-gate-icon" style={{borderColor:"rgba(255,107,107,.2)",background:"rgba(255,107,107,.08)"}}>
+                    <Lock size={26} strokeWidth={1.4} color="#ff6b6b"/>
+                  </div>
+                  <h3 style={{color:"#ff6b6b"}}>Trial Limit Reached</h3>
+                  <p>You've used all <strong style={{color:"#fff"}}>20 job results</strong> included in your trial. Upgrade to a paid plan to keep searching without limits.</p>
+                  <a href="/billing" className="gate-cta">Upgrade Now</a>
                 </div>
-                <button className="job-search-btn" onClick={handleJobSearch} disabled={jobLoading || !jobPrompt.trim()}>
-                  {jobLoading
-                    ? <><RefreshCw size={14} className="spin"/>Searching...</>
-                    : <><Send size={14}/>Find Jobs</>
-                  }
-                </button>
-              </div>
-
-              {/* Job error */}
-              {jobError && (
-                <div className="error-banner" style={{marginTop:"12px"}}>
-                  <AlertTriangle size={14} color="#ff6b6b"/>{jobError}
-                </div>
-              )}
-
-              {/* Job results */}
-              {jobSearched && (
-                <div className="job-results-section">
-                  <div className="results-hdr" style={{marginBottom:"14px"}}>
-                    <h2>
+              ) : (
+                <>
+                  {/* ── SEARCH BAR ── */}
+                  <div className="job-search-bar">
+                    <div className="job-input-wrap">
+                      <Search size={15} color="#8899bb" className="job-search-icon"/>
+                      <input
+                        className="job-input"
+                        value={jobPrompt}
+                        onChange={e => setJobPrompt(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && handleJobSearch()}
+                        placeholder='e.g. "React developer jobs in Lahore", "Remote Python engineer Pakistan"'
+                      />
+                    </div>
+                    <button className="job-search-btn" onClick={handleJobSearch} disabled={jobLoading || !jobPrompt.trim()}>
                       {jobLoading
-                        ? "Searching for jobs..."
-                        : jobResults.length > 0
-                          ? `${jobResults.length} job${jobResults.length !== 1 ? "s" : ""} found${isJobSearchLimited ? " (trial limit)" : ""}`
-                          : "No jobs found"}
-                    </h2>
+                        ? <><RefreshCw size={14} className="spin"/>Searching...</>
+                        : <><Send size={14}/>Find Jobs</>
+                      }
+                    </button>
                   </div>
 
-                  {jobLoading ? (
-                    <div className="job-skeleton-list">
-                      {[...Array(3)].map((_,i) => <div key={i} className="job-skeleton-card"/>)}
+                  {/* Job error */}
+                  {jobError && (
+                    <div className="error-banner" style={{marginTop:"12px"}}>
+                      <AlertTriangle size={14} color="#ff6b6b"/>{jobError}
                     </div>
-                  ) : jobResults.length === 0 && !jobError ? (
-                    <div className="no-results">
-                      <Briefcase size={32} color="#8899bb" strokeWidth={1.4}/>
-                      <p>No jobs found. Try rephrasing your search.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="job-list">
-                        {jobResults.map(job => (
-                          <div key={job.id} className="job-card">
-                            <div className="job-card-left">
-                              <div className="job-avatar">
-                                {job.company.charAt(0).toUpperCase()}
-                              </div>
-                              <div className="job-info">
-                                <h3 className="job-title">{job.title}</h3>
-                                <div className="job-meta">
-                                  <span className="job-meta-item"><Building2 size={11}/>{job.company}</span>
-                                  {job.location && <span className="job-meta-item"><MapPin size={11}/>{job.location}</span>}
-                                  {job.type && <span className="job-type-badge">{job.type}</span>}
-                                  {job.salary && <span className="job-salary">{job.salary}</span>}
-                                </div>
-                                <p className="job-desc">{job.description}</p>
-                                <div className="job-footer">
-                                  {job.postedAt && (
-                                    <span className="job-posted"><Clock size={10}/>{job.postedAt}</span>
-                                  )}
-                                  <span className="job-source">via {job.source}</span>
-                                </div>
-                              </div>
-                            </div>
-                            <a href={job.applyUrl} target="_blank" rel="noreferrer" className="job-apply-btn">
-                              Apply <ChevronRight size={14}/>
-                            </a>
-                          </div>
-                        ))}
+                  )}
+
+                  {/* Job results */}
+                  {jobSearched && (
+                    <div className="job-results-section">
+                      <div className="results-hdr" style={{marginBottom:"14px"}}>
+                        <h2>
+                          {jobLoading ? "Searching for jobs..."
+                            : jobResults.length > 0
+                              ? `${jobResults.length} job${jobResults.length !== 1 ? "s" : ""} found`
+                              : "No jobs found"}
+                        </h2>
                       </div>
 
-                      {/* Upgrade nudge after trial results */}
-                      {isJobSearchLimited && jobResults.length >= 10 && (
-                        <div className="job-upgrade-nudge">
-                          <Lock size={13} color="#a78bfa"/>
-                          <span>Upgrade to see <strong>unlimited job results</strong> per search.</span>
-                          <a href="/billing" className="job-upgrade-link">Upgrade now →</a>
+                      {jobLoading ? (
+                        <div className="job-skeleton-list">
+                          {[...Array(3)].map((_,i) => <div key={i} className="job-skeleton-card"/>)}
                         </div>
+                      ) : jobResults.length === 0 && !jobError ? (
+                        <div className="no-results">
+                          <Briefcase size={32} color="#8899bb" strokeWidth={1.4}/>
+                          <p>No jobs found. Try rephrasing your search.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="job-list">
+                            {jobResults.map(job => (
+                              <div key={job.id} className="job-card">
+                                <div className="job-card-left">
+                                  <div className="job-avatar">{job.company.charAt(0).toUpperCase()}</div>
+                                  <div className="job-info">
+                                    <h3 className="job-title">{job.title}</h3>
+                                    <div className="job-meta">
+                                      <span className="job-meta-item"><Building2 size={11}/>{job.company}</span>
+                                      {job.location && <span className="job-meta-item"><MapPin size={11}/>{job.location}</span>}
+                                      {job.type && <span className="job-type-badge">{job.type}</span>}
+                                      {job.salary && <span className="job-salary">{job.salary}</span>}
+                                    </div>
+                                    <p className="job-desc">{job.description}</p>
+                                    <div className="job-footer">
+                                      {job.postedAt && <span className="job-posted"><Clock size={10}/>{job.postedAt}</span>}
+                                      <span className="job-source">via {job.source}</span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <a href={job.applyUrl} target="_blank" rel="noreferrer" className="job-apply-btn">
+                                  Apply <ChevronRight size={14}/>
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Upgrade nudge when trial running low or after results */}
+                          {isJobSearchLimited && (
+                            <div className="job-upgrade-nudge">
+                              <Lock size={13} color="#a78bfa"/>
+                              <span><strong>{TRIAL_JOB_LIMIT - jobResultsUsed}</strong> trial results remaining. Upgrade for unlimited access.</span>
+                              <a href="/billing" className="job-upgrade-link">Upgrade now →</a>
+                            </div>
+                          )}
+                        </>
                       )}
-                    </>
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </>
           )}
@@ -756,11 +796,13 @@ export default function LeadSearchPage() {
           display:flex;align-items:center;gap:8px;
           background:rgba(255,215,0,.07);border:1px solid rgba(255,215,0,.18);
           border-radius:10px;padding:10px 14px;margin-bottom:14px;
-          font-size:13px;color:#ffd700;
+          font-size:13px;color:#ffd700;flex-wrap:wrap;
         }
         .job-trial-banner strong{color:#fff;}
         .job-trial-banner a{margin-left:auto;color:#ffd700;font-weight:600;font-size:12px;white-space:nowrap;}
         .job-trial-banner a:hover{text-decoration:underline;}
+        .job-usage-track{flex:1;min-width:60px;height:4px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;}
+        .job-usage-fill{height:100%;border-radius:4px;transition:width .4s ease;}
 
         /* Upgrade nudge after results */
         .job-upgrade-nudge{
