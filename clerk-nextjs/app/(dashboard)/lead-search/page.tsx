@@ -105,6 +105,11 @@ export default function LeadSearchPage() {
                   : Array.isArray(raw)       ? raw.length
                   : Number(raw) || 0;
       setLeadsCount(count);
+
+      // Sync jobResultsUsed from DB so cumulative count survives page reloads
+      const usedFromDb = Number(uData?.jobResultsUsed ?? 0);
+      setJobResultsUsed(usedFromDb);
+      if (usedFromDb >= 20) setJobLimitReached(true);
     } catch(e) { console.error(e); }
   }, [email]);
 
