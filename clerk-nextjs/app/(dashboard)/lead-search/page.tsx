@@ -179,8 +179,8 @@ export default function LeadSearchPage() {
 
       const data = await res.json();
 
-      if (res.status === 403 || data.limitReached) {
-        // Limit reached — update state, show gate
+      // 403 = already at limit BEFORE this search — no jobs returned
+      if (res.status === 403) {
         setJobLimitReached(true);
         setJobResultsUsed(data.jobResultsUsed ?? TRIAL_JOB_LIMIT);
         setJobResults([]);
@@ -190,9 +190,11 @@ export default function LeadSearchPage() {
       if (data.error) {
         setJobError(data.error);
       } else {
+        // Always show jobs first, even if limit was hit during this search
         setJobResults(data.jobs || []);
         if (isJobSearchLimited) {
           setJobResultsUsed(data.jobResultsUsed ?? 0);
+          // Lock AFTER results are set so user can still see them
           setJobLimitReached(data.limitReached ?? false);
         }
       }
@@ -507,15 +509,12 @@ export default function LeadSearchPage() {
                 </div>
               )}
 
-              {/* ── TRIAL LIMIT REACHED GATE ── */}
+              {/* ── SEARCH BAR or LIMIT GATE ── */}
               {isJobSearchLimited && jobLimitReached ? (
-                <div className="job-gate-box" style={{paddingTop:"28px",paddingBottom:"28px"}}>
-                  <div className="job-gate-icon" style={{borderColor:"rgba(255,107,107,.2)",background:"rgba(255,107,107,.08)"}}>
-                    <Lock size={26} strokeWidth={1.4} color="#ff6b6b"/>
-                  </div>
-                  <h3 style={{color:"#ff6b6b"}}>Trial Limit Reached</h3>
-                  <p>You've used all <strong style={{color:"#fff"}}>20 job results</strong> included in your trial. Upgrade to a paid plan to keep searching without limits.</p>
-                  <a href="/billing" className="gate-cta">Upgrade Now</a>
+                <div className="job-limit-banner">
+                  <Lock size={14} color="#ff6b6b"/>
+                  <span>You've used all <strong>20 job results</strong> in your trial.</span>
+                  <a href="/billing" className="job-upgrade-link">Upgrade Now →</a>
                 </div>
               ) : (
                 <>
@@ -545,70 +544,75 @@ export default function LeadSearchPage() {
                       <AlertTriangle size={14} color="#ff6b6b"/>{jobError}
                     </div>
                   )}
+                </>
+              )}
 
-                  {/* Job results */}
-                  {jobSearched && (
-                    <div className="job-results-section">
-                      <div className="results-hdr" style={{marginBottom:"14px"}}>
-                        <h2>
-                          {jobLoading ? "Searching for jobs..."
-                            : jobResults.length > 0
-                              ? `${jobResults.length} job${jobResults.length !== 1 ? "s" : ""} found`
-                              : "No jobs found"}
-                        </h2>
+              {/* Job results — always visible regardless of limit state */}
+              {jobSearched && (
+                <div className="job-results-section">
+                  <div className="results-hdr" style={{marginBottom:"14px"}}>
+                    <h2>
+                      {jobLoading ? "Searching for jobs..."
+                        : jobResults.length > 0
+                          ? `${jobResults.length} job${jobResults.length !== 1 ? "s" : ""} found`
+                          : !jobLimitReached ? "No jobs found" : ""}
+                    </h2>
+                  </div>
+
+                  {jobLoading ? (
+                    <div className="job-skeleton-list">
+                      {[...Array(3)].map((_,i) => <div key={i} className="job-skeleton-card"/>)}
+                    </div>
+                  ) : jobResults.length === 0 && !jobError && !jobLimitReached ? (
+                    <div className="no-results">
+                      <Briefcase size={32} color="#8899bb" strokeWidth={1.4}/>
+                      <p>No jobs found. Try rephrasing your search.</p>
+                    </div>
+                  ) : jobResults.length > 0 ? (
+                    <>
+                      <div className="job-list">
+                        {jobResults.map(job => (
+                          <div key={job.id} className="job-card">
+                            <div className="job-card-left">
+                              <div className="job-avatar">{job.company.charAt(0).toUpperCase()}</div>
+                              <div className="job-info">
+                                <h3 className="job-title">{job.title}</h3>
+                                <div className="job-meta">
+                                  <span className="job-meta-item"><Building2 size={11}/>{job.company}</span>
+                                  {job.location && <span className="job-meta-item"><MapPin size={11}/>{job.location}</span>}
+                                  {job.type && <span className="job-type-badge">{job.type}</span>}
+                                  {job.salary && <span className="job-salary">{job.salary}</span>}
+                                </div>
+                                <p className="job-desc">{job.description}</p>
+                                <div className="job-footer">
+                                  {job.postedAt && <span className="job-posted"><Clock size={10}/>{job.postedAt}</span>}
+                                  <span className="job-source">via {job.source}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <a href={job.applyUrl} target="_blank" rel="noreferrer" className="job-apply-btn">
+                              Apply <ChevronRight size={14}/>
+                            </a>
+                          </div>
+                        ))}
                       </div>
 
-                      {jobLoading ? (
-                        <div className="job-skeleton-list">
-                          {[...Array(3)].map((_,i) => <div key={i} className="job-skeleton-card"/>)}
+                      {/* Upgrade nudge shown after results */}
+                      {isJobSearchLimited && (
+                        <div className="job-upgrade-nudge">
+                          <Lock size={13} color="#a78bfa"/>
+                          <span>
+                            {jobLimitReached
+                              ? <><strong>Trial limit reached.</strong> Upgrade for unlimited job searches.</>
+                              : <><strong>{TRIAL_JOB_LIMIT - jobResultsUsed}</strong> trial results remaining.</>
+                            }
+                          </span>
+                          <a href="/billing" className="job-upgrade-link">Upgrade now →</a>
                         </div>
-                      ) : jobResults.length === 0 && !jobError ? (
-                        <div className="no-results">
-                          <Briefcase size={32} color="#8899bb" strokeWidth={1.4}/>
-                          <p>No jobs found. Try rephrasing your search.</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="job-list">
-                            {jobResults.map(job => (
-                              <div key={job.id} className="job-card">
-                                <div className="job-card-left">
-                                  <div className="job-avatar">{job.company.charAt(0).toUpperCase()}</div>
-                                  <div className="job-info">
-                                    <h3 className="job-title">{job.title}</h3>
-                                    <div className="job-meta">
-                                      <span className="job-meta-item"><Building2 size={11}/>{job.company}</span>
-                                      {job.location && <span className="job-meta-item"><MapPin size={11}/>{job.location}</span>}
-                                      {job.type && <span className="job-type-badge">{job.type}</span>}
-                                      {job.salary && <span className="job-salary">{job.salary}</span>}
-                                    </div>
-                                    <p className="job-desc">{job.description}</p>
-                                    <div className="job-footer">
-                                      {job.postedAt && <span className="job-posted"><Clock size={10}/>{job.postedAt}</span>}
-                                      <span className="job-source">via {job.source}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                                <a href={job.applyUrl} target="_blank" rel="noreferrer" className="job-apply-btn">
-                                  Apply <ChevronRight size={14}/>
-                                </a>
-                              </div>
-                            ))}
-                          </div>
-
-                          {/* Upgrade nudge when trial running low or after results */}
-                          {isJobSearchLimited && (
-                            <div className="job-upgrade-nudge">
-                              <Lock size={13} color="#a78bfa"/>
-                              <span><strong>{TRIAL_JOB_LIMIT - jobResultsUsed}</strong> trial results remaining. Upgrade for unlimited access.</span>
-                              <a href="/billing" className="job-upgrade-link">Upgrade now →</a>
-                            </div>
-                          )}
-                        </>
                       )}
-                    </div>
-                  )}
-                </>
+                    </>
+                  ) : null}
+                </div>
               )}
             </>
           )}
@@ -808,6 +812,16 @@ export default function LeadSearchPage() {
         .job-trial-banner a:hover{text-decoration:underline;}
         .job-usage-track{flex:1;min-width:60px;height:4px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;}
         .job-usage-fill{height:100%;border-radius:4px;transition:width .4s ease;}
+
+        /* Inline limit banner (replaces search bar when trial exhausted) */
+        .job-limit-banner{
+          display:flex;align-items:center;gap:8px;
+          background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.2);
+          border-radius:10px;padding:12px 16px;margin-bottom:14px;
+          font-size:13px;color:#ff6b6b;
+        }
+        .job-limit-banner strong{color:#fff;}
+        .job-limit-banner a{margin-left:auto;white-space:nowrap;}
 
         /* Upgrade nudge after results */
         .job-upgrade-nudge{

@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
         trialStartedAt:       true,
         trialEndsAt:          true,
         trialUsed:            true,
+        jobResultsUsed:       true,  // ← ADD THIS
       },
     });
 
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
           id:true, email:true, plan:true, subscriptionStatus:true,
           stripeCustomerId:true, stripeSubscriptionId:true, role:true,
           createdAt:true, trialStartedAt:true, trialEndsAt:true, trialUsed:true,
+          jobResultsUsed:true,  // ← ADD THIS
         },
       });
     }
@@ -45,14 +47,12 @@ export async function POST(req: NextRequest) {
     // ── Trial status calculation ─────────────────────────────────────────
     const now = new Date();
 
-    // Is user currently on an active trial?
     const isOnTrial = !!(
       user.trialEndsAt &&
       now < new Date(user.trialEndsAt) &&
       (user.plan === "free" || user.plan === "trial")
     );
 
-    // Has trial expired (was on trial, now it's over, no paid plan)?
     const isTrialExpired = !!(
       user.trialEndsAt &&
       now >= new Date(user.trialEndsAt) &&
@@ -60,23 +60,18 @@ export async function POST(req: NextRequest) {
       user.subscriptionStatus !== "active"
     );
 
-    // Days remaining in trial
     const trialDaysLeft = isOnTrial
       ? Math.max(0, Math.ceil((new Date(user.trialEndsAt!).getTime() - now.getTime()) / (1000*60*60*24)))
       : 0;
 
-    // Can user still start a trial?
     const canStartTrial = !user.trialUsed && !isOnTrial && user.subscriptionStatus !== "active";
 
     return NextResponse.json({
       ...user,
-      // ── Computed trial fields ──
       isOnTrial,
       isTrialExpired,
       trialDaysLeft,
       canStartTrial,
-      // ── Effective plan for feature gating ──
-      // If on trial → treat as "trial" plan, if expired & no paid → "expired"
       effectivePlan: isTrialExpired
         ? "expired"
         : isOnTrial
