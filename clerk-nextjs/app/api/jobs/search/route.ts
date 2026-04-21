@@ -41,24 +41,59 @@ interface JobResult {
 async function generateJobResults(prompt: string, count: number): Promise<JobResult[]> {
   const today = new Date().toISOString().split("T")[0];
 
-  const systemPrompt = `You are a job search assistant. Return exactly ${count} realistic, currently-available job listings matching the user's query.
+  const systemPrompt = `You are a global job search assistant. Return exactly ${count} realistic, currently-available job listings matching the user's query.
 
 Today's date is ${today}.
 
-For each listing:
-- Use real company names (e.g. Devsinc, Systems Ltd, NetSol, MTBC, Folio3, Arbisoft, 10Pearls, Careem, Daraz, i2c for Pakistan tech roles)
-- Apply URLs:
-  * LinkedIn:  https://www.linkedin.com/jobs/search/?keywords=JOBTITLE+COMPANY
-  * Indeed:    https://pk.indeed.com/jobs?q=JOBTITLE+COMPANY&l=LOCATION
-  * Rozee:     https://www.rozee.pk/job/jsearch/q/JOBTITLE
-  * Glassdoor: https://www.glassdoor.com/Job/jobs.htm?sc.keyword=JOBTITLE+COMPANY
-- postedAt: "Today", "2 days ago", "3 days ago", "1 week ago"
-- type: "Full-time" | "Remote" | "Hybrid" | "Contract" | "Part-time"
-- description: 1-2 sentences, role + key requirements
-- salary: estimate if possible (e.g. "PKR 150K–250K/month"), else omit
-- source: "LinkedIn" | "Indeed" | "Rozee.pk" | "Glassdoor" | "Bayt"
+CRITICAL RULES:
+1. LOCATION: Detect the city/country from the user's prompt. Use ONLY companies and jobs from that specific location. If no location is mentioned, default to global/remote.
+2. CURRENCY: Use the correct local currency for salary based on the job location:
+   - USA/Canada → USD (e.g. "$80K–$120K/year")
+   - UK → GBP (e.g. "£45K–£65K/year")
+   - UAE/Dubai → AED (e.g. "AED 8,000–15,000/month")
+   - Saudi Arabia → SAR (e.g. "SAR 10,000–18,000/month")
+   - Europe → EUR (e.g. "€50K–€80K/year")
+   - Pakistan → PKR (e.g. "PKR 150K–300K/month")
+   - India → INR (e.g. "₹8L–₹15L/year")
+   - Australia → AUD (e.g. "AUD 90K–130K/year")
+   - Remote/Global → USD
+3. COMPANIES: Use real, well-known companies from that country/city. 
+   - Dubai/UAE: Noon, Careem, Talabat, Emirates Group, Majid Al Futtaim, Dubizzle, Property Finder, Souq
+   - Saudi Arabia: STC, Aramco, SABIC, Jarir, stc pay, Foodics, Unifonic
+   - USA: Google, Meta, Amazon, Stripe, Airbnb, Uber, Salesforce, startups
+   - UK: HSBC, Revolut, Monzo, Sky, BT, Deliveroo, Wise
+   - Pakistan: Devsinc, Systems Ltd, NetSol, Folio3, Arbisoft, 10Pearls, i2c, Careem
+   - India: Infosys, TCS, Flipkart, Razorpay, Zomato, BYJU's, Swiggy
+4. APPLY URLS: Use the correct job board for the location:
+   - LinkedIn (all countries): https://www.linkedin.com/jobs/search/?keywords=JOBTITLE+COMPANY&location=CITY
+   - Indeed USA: https://www.indeed.com/jobs?q=JOBTITLE&l=CITY
+   - Indeed UK: https://uk.indeed.com/jobs?q=JOBTITLE&l=CITY
+   - Indeed Pakistan: https://pk.indeed.com/jobs?q=JOBTITLE&l=CITY
+   - Bayt (Middle East): https://www.bayt.com/en/uae/jobs/?q=JOBTITLE
+   - Naukri (India): https://www.naukri.com/JOBTITLE-jobs-in-CITY
+   - Glassdoor: https://www.glassdoor.com/Job/jobs.htm?sc.keyword=JOBTITLE+LOCATION
+5. postedAt: "Today", "2 days ago", "3 days ago", "1 week ago"
+6. type: "Full-time" | "Remote" | "Hybrid" | "Contract" | "Part-time"
+7. description: 1-2 sentences about the role and key requirements
+8. source: "LinkedIn" | "Indeed" | "Bayt" | "Glassdoor" | "Naukri" | "Rozee.pk"
 
-Return ONLY a valid JSON array. No markdown, no code fences.`;
+Return ONLY a valid JSON array. No markdown, no code fences, no explanation.
+
+Example for Dubai prompt:
+[
+  {
+    "id": "job_001",
+    "title": "Senior React Developer",
+    "company": "Property Finder",
+    "location": "Dubai, UAE",
+    "type": "Hybrid",
+    "postedAt": "2 days ago",
+    "description": "Build scalable web platforms for the leading real estate portal in MENA. 4+ years React experience required.",
+    "applyUrl": "https://www.linkedin.com/jobs/search/?keywords=Senior+React+Developer+Property+Finder&location=Dubai",
+    "source": "LinkedIn",
+    "salary": "AED 12,000–18,000/month"
+  }
+]`;
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
