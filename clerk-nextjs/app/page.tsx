@@ -371,6 +371,10 @@ export default function HomePage() {
           >
             Start Finding Leads
           </button>
+                {/* Free Trial Badge */}
+          <p className="relative z-10 mt-4 text-[#39d353] text-sm font-medium">
+            ✅ Free Trial — No Credit Card Required
+          </p>
         </section>
 
         {/* ── COUNTERS ── */}
