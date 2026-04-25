@@ -1,11 +1,17 @@
 // app/api/leads/search/route.ts
 //
-// PAGINATION STRATEGY:
-// On first search: fetch ALL available Google pages (up to 3 = 60 results)
-// synchronously using token polling. Cache all 60. Return first 20 unseen.
-// On repeat search: serve next 20 from cache. No extra Google API calls.
+// STRATEGY — one Google page per user request:
 //
-// Prisma schema (add nextPageToken field if not already present):
+//  Search 1:  fetch page 1 (20 results) → save leads + next_page_token to DB
+//             → return 20 leads
+//  Search 2:  load DB cache (20 leads) → all 20 already seen
+//             → token exists → fetch page 2 NOW (wait 2 s for token)
+//             → append 20 more leads to cache → return next 20
+//  Search 3:  same for page 3 (up to 60 total)
+//  Search 4+: pool exhausted, tell user to try different keyword
+//
+// Prisma model — add nextPageToken field and run `npx prisma db push`:
+//
 //  model SearchCache {
 //    id            String   @id @default(cuid())
 //    cacheKey      String   @unique
@@ -27,11 +33,11 @@ const GOOGLE_API_KEY =
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
-const MEMORY_CACHE_TTL_MS = 30 * 60 * 1000;
-const DB_CACHE_TTL_HOURS  = 24;
-const RESULTS_PER_PAGE    = 20; // how many leads to show per search click
+const MEMORY_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const DB_CACHE_TTL_HOURS  = 48;
+const BATCH_SIZE           = 20; // leads to return per search click
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PlaceResult {
   place_id: string;
@@ -63,35 +69,35 @@ interface LeadResult {
   fromCache?: boolean;
 }
 
-interface CacheEntry {
+interface PoolEntry {
   leads: LeadResult[];
+  nextPageToken: string | null;
   location: string;
-  expiresAt: number;
 }
 
 // ─── In-memory cache ──────────────────────────────────────────────────────────
 
-const memoryCache = new Map<string, CacheEntry>();
+interface MemEntry extends PoolEntry { expiresAt: number }
+const mem = new Map<string, MemEntry>();
 
 function toCacheKey(q: string) {
   return q.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-function readMemoryCache(key: string): LeadResult[] | null {
-  const e = memoryCache.get(key);
+function memRead(key: string): PoolEntry | null {
+  const e = mem.get(key);
   if (!e) return null;
-  if (Date.now() > e.expiresAt) { memoryCache.delete(key); return null; }
-  console.log(`Memory cache HIT: "${key}" (${e.leads.length} leads)`);
-  return e.leads;
+  if (Date.now() > e.expiresAt) { mem.delete(key); return null; }
+  return e;
 }
 
-function writeMemoryCache(key: string, leads: LeadResult[], location: string) {
-  memoryCache.set(key, { leads, location, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS });
+function memWrite(key: string, entry: PoolEntry) {
+  mem.set(key, { ...entry, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS });
 }
 
 // ─── DB cache ─────────────────────────────────────────────────────────────────
 
-async function readDBCache(key: string): Promise<LeadResult[] | null> {
+async function dbRead(key: string): Promise<PoolEntry | null> {
   try {
     const row = await (db as any).searchCache.findUnique({ where: { cacheKey: key } });
     if (!row) return null;
@@ -99,143 +105,98 @@ async function readDBCache(key: string): Promise<LeadResult[] | null> {
       (db as any).searchCache.delete({ where: { cacheKey: key } }).catch(() => {});
       return null;
     }
-    console.log(`DB cache HIT: "${key}"`);
-    return JSON.parse(row.leadsJson) as LeadResult[];
-  } catch { return null; }
+    return {
+      leads: JSON.parse(row.leadsJson) as LeadResult[],
+      nextPageToken: row.nextPageToken ?? null,
+      location: row.location,
+    };
+  } catch (e) {
+    console.error("DB read error:", e);
+    return null;
+  }
 }
 
-async function writeDBCache(key: string, leads: LeadResult[], location: string) {
+async function dbWrite(key: string, entry: PoolEntry) {
   try {
     const expiresAt = new Date(Date.now() + DB_CACHE_TTL_HOURS * 3600 * 1000);
     await (db as any).searchCache.upsert({
-      where: { cacheKey: key },
-      update: { leadsJson: JSON.stringify(leads), location, expiresAt },
-      create: { cacheKey: key, leadsJson: JSON.stringify(leads), location, expiresAt },
+      where:  { cacheKey: key },
+      update: { leadsJson: JSON.stringify(entry.leads), nextPageToken: entry.nextPageToken, location: entry.location, expiresAt },
+      create: { cacheKey: key, leadsJson: JSON.stringify(entry.leads), nextPageToken: entry.nextPageToken, location: entry.location, expiresAt },
     });
-  } catch {}
-}
-
-// ─── AI Query Parser ──────────────────────────────────────────────────────────
-
-async function parseUserQuery(keyword: string, industry: string, location: string) {
-  const parts = [keyword, industry, location].filter(Boolean);
-  if (!OPENAI_API_KEY || keyword.trim().split(/\s+/).length <= 4) {
-    return { searchQuery: parts.join(" "), extractedLocation: location };
-  }
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini", max_tokens: 150,
-        messages: [{ role: "user", content:
-          `Convert to a short Google Places query (3-6 words).
-Keyword: "${keyword}" | Industry: "${industry}" | Location: "${location}"
-Reply ONLY as JSON: {"searchQuery":"...","location":"..."}` }],
-      }),
-    });
-    const d = await res.json();
-    const parsed = JSON.parse(d.choices?.[0]?.message?.content?.replace(/```json|```/g,"").trim() || "{}");
-    return { searchQuery: parsed.searchQuery || parts.join(" "), extractedLocation: parsed.location || location };
-  } catch {
-    return { searchQuery: parts.join(" "), extractedLocation: location };
+    console.log(`DB saved: ${entry.leads.length} leads, token=${!!entry.nextPageToken}`);
+  } catch (e) {
+    console.error("DB write error:", e);
   }
 }
 
-// ─── Google Places: fetch ALL pages upfront ───────────────────────────────────
+// ─── Google Places ────────────────────────────────────────────────────────────
 
-async function getPlaceDetails(placeId: string): Promise<PlaceResult | null> {
+async function getDetails(placeId: string): Promise<PlaceResult | null> {
   const fields = "place_id,name,formatted_address,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,types,opening_hours";
   try {
-    const res = await fetch(
-      `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${GOOGLE_API_KEY}`,
-      { cache: "no-store" }
-    );
-    const d = await res.json();
+    const r = await fetch(`https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=${fields}&key=${GOOGLE_API_KEY}`, { cache: "no-store" });
+    const d = await r.json();
     return d.status === "OK" ? d.result : null;
   } catch { return null; }
 }
 
+function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+
 /**
- * Poll for a pagetoken to become valid.
- * Google says token is valid "shortly after" the previous response —
- * typically 2-3 seconds. We retry up to 5 times with 2s gaps.
+ * Fetch ONE page from Google Places.
+ * - First page: pass `query`, leave `token` undefined
+ * - Next pages:  pass `token` only (no query needed)
+ *
+ * For token pages we retry up to 6 times with 2.5 s gaps because
+ * Google makes the token valid "shortly after" the prior response.
  */
-async function fetchPageWithToken(token: string): Promise<{ placeIds: string[]; nextToken: string | null }> {
-  const MAX_RETRIES = 5;
-  const RETRY_DELAY = 2000;
+async function fetchGooglePage(
+  query: string,
+  token?: string
+): Promise<{ places: PlaceResult[]; nextToken: string | null }> {
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    // Always wait before using a pagetoken
-    await new Promise(r => setTimeout(r, RETRY_DELAY));
+  if (token) {
+    // Retry loop until token becomes valid
+    for (let attempt = 1; attempt <= 6; attempt++) {
+      await sleep(2500); // must wait before each token use
+      const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(token)}&key=${GOOGLE_API_KEY}`;
+      const res  = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
 
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(token)}&key=${GOOGLE_API_KEY}`;
-    const res  = await fetch(url, { cache: "no-store" });
-    const data = await res.json();
+      console.log(`Token page attempt ${attempt}: status=${data.status} results=${data.results?.length ?? 0}`);
 
-    console.log(`Pagetoken attempt ${attempt}: status=${data.status} results=${data.results?.length ?? 0}`);
+      if (data.status === "OK" && data.results?.length) {
+        const details = await Promise.all(data.results.map((r: any) => getDetails(r.place_id)));
+        return {
+          places:    details.filter(Boolean) as PlaceResult[],
+          nextToken: data.next_page_token ?? null,
+        };
+      }
 
-    if (data.status === "OK" && data.results?.length) {
-      return {
-        placeIds: data.results.map((r: any) => r.place_id).filter(Boolean),
-        nextToken: data.next_page_token ?? null,
-      };
+      if (data.status === "INVALID_REQUEST") continue; // token not ready yet
+      break; // ZERO_RESULTS or other — stop
     }
-
-    if (data.status === "INVALID_REQUEST") {
-      // Token not ready yet — retry
-      console.log("Token not ready, retrying...");
-      continue;
-    }
-
-    // Any other status (ZERO_RESULTS, etc.) — stop
-    break;
+    return { places: [], nextToken: null };
   }
 
-  return { placeIds: [], nextToken: null };
-}
-
-/**
- * Fetch ALL available Google Places results for a query.
- * Returns up to 60 place IDs (3 pages × 20).
- */
-async function fetchAllPlaceIds(query: string): Promise<string[]> {
-  const allIds: string[] = [];
-
-  // Page 1
-  const url1 = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
+  // First page — use query param
+  const url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
   console.log(`Google Places page 1: "${query}"`);
-  const res1  = await fetch(url1, { cache: "no-store" });
-  const data1 = await res1.json();
+  const res  = await fetch(url, { cache: "no-store" });
+  const data = await res.json();
+  console.log(`Page 1: status=${data.status} results=${data.results?.length ?? 0} hasToken=${!!data.next_page_token}`);
 
-  console.log(`Page 1: status=${data1.status} results=${data1.results?.length ?? 0} hasToken=${!!data1.next_page_token}`);
+  if (data.status !== "OK" || !data.results?.length) return { places: [], nextToken: null };
 
-  if (data1.status !== "OK" || !data1.results?.length) return allIds;
-
-  for (const r of data1.results) { if (r.place_id) allIds.push(r.place_id); }
-
-  let nextToken: string | null = data1.next_page_token ?? null;
-
-  // Page 2
-  if (nextToken) {
-    console.log("Fetching page 2...");
-    const p2 = await fetchPageWithToken(nextToken);
-    for (const id of p2.placeIds) { if (!allIds.includes(id)) allIds.push(id); }
-    nextToken = p2.nextToken;
-
-    // Page 3
-    if (nextToken) {
-      console.log("Fetching page 3...");
-      const p3 = await fetchPageWithToken(nextToken);
-      for (const id of p3.placeIds) { if (!allIds.includes(id)) allIds.push(id); }
-    }
-  }
-
-  console.log(`Total place IDs collected: ${allIds.length}`);
-  return allIds;
+  const details = await Promise.all(data.results.map((r: any) => getDetails(r.place_id)));
+  return {
+    places:    details.filter(Boolean) as PlaceResult[],
+    nextToken: data.next_page_token ?? null,
+  };
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
+// ─── Utility helpers ──────────────────────────────────────────────────────────
 
 function guessEmail(website: string): string | null {
   if (!website) return null;
@@ -244,7 +205,7 @@ function guessEmail(website: string): string | null {
 }
 
 function inferIndustry(types: string[]): string {
-  const map: Record<string,string> = {
+  const map: Record<string, string> = {
     restaurant:"Food & Beverage", food:"Food & Beverage", cafe:"Food & Beverage",
     hospital:"Healthcare", doctor:"Healthcare", pharmacy:"Healthcare", dentist:"Healthcare",
     school:"Education", university:"Education", gym:"Fitness", spa:"Wellness",
@@ -277,8 +238,8 @@ async function generateAIInsight(
   const phone = place.formatted_phone_number || place.international_phone_number || "";
   const base =
     `${place.name} is a ${priority.toLowerCase()}-priority ${industry} lead in ${loc} (score: ${score}/100).` +
-    (place.rating ? ` Rated ${place.rating}⭐ by ${(place.user_ratings_total||0).toLocaleString()} customers.` : "") +
-    (place.website ? ` Website: ${place.website.replace(/https?:\/\//,"").split("/")[0]}.` : " No website — great cold outreach opportunity.") +
+    (place.rating ? ` Rated ${place.rating}⭐ by ${(place.user_ratings_total || 0).toLocaleString()} customers.` : "") +
+    (place.website ? ` Website: ${place.website.replace(/https?:\/\//, "").split("/")[0]}.` : " No website — great cold outreach opportunity.") +
     (phone ? " Phone available." : " No phone listed.") +
     (email ? ` Suggested email: ${email}.` : "");
 
@@ -292,15 +253,15 @@ async function generateAIInsight(
         messages: [{ role: "user", content:
           `B2B analyst: 2-3 sentences on why this is a good lead (no bullets, no score):
 Business: ${place.name} | Industry: ${industry} | Location: ${place.formatted_address || loc}
-Types: ${(place.types||[]).join(", ")} | Rating: ${place.rating||"N/A"} (${place.user_ratings_total||0} reviews)
-Has Website: ${place.website?"Yes":"No"} | Has Phone: ${phone?"Yes":"No"}` }],
+Types: ${(place.types || []).join(", ")} | Rating: ${place.rating || "N/A"} (${place.user_ratings_total || 0} reviews)
+Has Website: ${place.website ? "Yes" : "No"} | Has Phone: ${phone ? "Yes" : "No"}` }],
       }),
     });
-    const d = await res.json();
+    const d    = await res.json();
     const text = d.choices?.[0]?.message?.content?.trim() || "";
     if (!text) return base;
     return `${text}\n\n📊 Score: ${score}/100 · Priority: ${priority}` +
-      (place.rating ? ` · ⭐ ${place.rating} (${(place.user_ratings_total||0).toLocaleString()} reviews)` : "") +
+      (place.rating ? ` · ⭐ ${place.rating} (${(place.user_ratings_total || 0).toLocaleString()} reviews)` : "") +
       (phone ? " · 📞 Phone available" : " · No phone listed") +
       (email ? ` · 📧 ${email}` : "");
   } catch { return base; }
@@ -309,7 +270,7 @@ Has Website: ${place.website?"Yes":"No"} | Has Phone: ${phone?"Yes":"No"}` }],
 async function buildLeads(places: PlaceResult[], loc: string): Promise<LeadResult[]> {
   const out: LeadResult[] = [];
   for (let i = 0; i < places.length; i += 10) {
-    const batch = await Promise.all(places.slice(i, i+10).map(async p => {
+    const batch = await Promise.all(places.slice(i, i + 10).map(async p => {
       const score    = scorePlace(p);
       const priority = score >= 70 ? "High" : score >= 45 ? "Medium" : "Low";
       const phone    = p.formatted_phone_number || p.international_phone_number || "";
@@ -330,6 +291,31 @@ async function buildLeads(places: PlaceResult[], loc: string): Promise<LeadResul
   return out;
 }
 
+async function parseUserQuery(keyword: string, industry: string, location: string) {
+  const parts = [keyword, industry, location].filter(Boolean);
+  if (!OPENAI_API_KEY || keyword.trim().split(/\s+/).length <= 4) {
+    return { searchQuery: parts.join(" "), extractedLocation: location };
+  }
+  try {
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini", max_tokens: 150,
+        messages: [{ role: "user", content:
+          `Convert to a short Google Places query (3-6 words).
+Keyword: "${keyword}" | Industry: "${industry}" | Location: "${location}"
+Reply ONLY as JSON: {"searchQuery":"...","location":"..."}` }],
+      }),
+    });
+    const d = await res.json();
+    const parsed = JSON.parse(d.choices?.[0]?.message?.content?.replace(/```json|```/g, "").trim() || "{}");
+    return { searchQuery: parsed.searchQuery || parts.join(" "), extractedLocation: parsed.location || location };
+  } catch {
+    return { searchQuery: parts.join(" "), extractedLocation: location };
+  }
+}
+
 async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
   try {
     const user = await db.user.findUnique({ where: { email: userEmail } }).catch(() => null);
@@ -341,7 +327,7 @@ async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
           await (db as any).lead.create({
             data: {
               userId: user.id, company: lead.company, address: lead.address,
-              phone: lead.phone||null, email: lead.email||null, website: lead.website||null,
+              phone: lead.phone || null, email: lead.email || null, website: lead.website || null,
               industry: lead.industry, score: lead.score, priority: lead.priority,
               aiInsights: lead.aiInsight, source: "google_maps", placeId: lead.placeId,
               linkedinUrl: lead.linkedinUrl, saved: false, status: "new",
@@ -376,63 +362,89 @@ export async function POST(req: NextRequest) {
     const displayLoc = extractedLocation || location || "this area";
     const excludeSet = new Set<string>(excludePlaceIds);
 
-    // ── Load full pool from cache ─────────────────────────────────────────────
-    let pool: LeadResult[] | null = readMemoryCache(cacheKey);
+    console.log(`\n=== SEARCH: "${searchQuery}" | excludeCount=${excludeSet.size} ===`);
 
+    // ── Load pool from cache ──────────────────────────────────────────────────
+    let pool = memRead(cacheKey);
     if (!pool) {
-      pool = await readDBCache(cacheKey);
-      if (pool) writeMemoryCache(cacheKey, pool, displayLoc);
+      pool = await dbRead(cacheKey);
+      if (pool) memWrite(cacheKey, pool);
     }
 
-    // ── If no cache: fetch ALL pages from Google now ──────────────────────────
+    // ── Find unseen leads in current pool ─────────────────────────────────────
+    const unseenInPool = pool ? pool.leads.filter(l => !excludeSet.has(l.placeId)) : [];
+
+    console.log(`Pool size: ${pool?.leads.length ?? 0} | Unseen: ${unseenInPool.length} | HasToken: ${!!pool?.nextPageToken}`);
+
+    // ── If enough unseen leads → return them directly ─────────────────────────
+    if (unseenInPool.length >= BATCH_SIZE) {
+      const toReturn = unseenInPool.slice(0, BATCH_SIZE);
+      console.log(`Returning ${toReturn.length} cached unseen leads`);
+      return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: pool!.leads.length });
+    }
+
+    // ── If some unseen but fewer than BATCH_SIZE → also try fetching next page ─
+    // ── If zero unseen → definitely need next page ────────────────────────────
+    if (pool?.nextPageToken) {
+      console.log(`Fetching next Google page (token exists)...`);
+      const { places: newPlaces, nextToken } = await fetchGooglePage(searchQuery, pool.nextPageToken);
+
+      if (newPlaces.length > 0) {
+        const newLeads    = await buildLeads(newPlaces, displayLoc);
+        const existingIds = new Set(pool.leads.map(l => l.placeId));
+        const fresh       = newLeads.filter(l => !existingIds.has(l.placeId));
+        const updatedPool: PoolEntry = {
+          leads:         [...pool.leads, ...fresh],
+          nextPageToken: nextToken,
+          location:      displayLoc,
+        };
+
+        memWrite(cacheKey, updatedPool);
+        await dbWrite(cacheKey, updatedPool);
+        if (userEmail) saveLeadsToDB(fresh, userEmail).catch(() => {});
+
+        console.log(`Appended ${fresh.length} new leads. Total pool: ${updatedPool.leads.length}. NextToken: ${!!nextToken}`);
+
+        // Now return unseen from the updated pool
+        const allUnseen = updatedPool.leads.filter(l => !excludeSet.has(l.placeId));
+        const toReturn  = allUnseen.slice(0, BATCH_SIZE);
+        return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: updatedPool.leads.length });
+      }
+    }
+
+    // ── No cache at all → first search ───────────────────────────────────────
     if (!pool) {
-      console.log("Cache miss — fetching all pages from Google...");
+      console.log("No cache — fetching page 1 from Google...");
+      const { places, nextToken } = await fetchGooglePage(searchQuery);
 
-      const allPlaceIds = await fetchAllPlaceIds(searchQuery);
-
-      if (!allPlaceIds.length) {
-        return NextResponse.json({ leads: [], total: 0, message: "No results found" });
+      if (!places.length) {
+        return NextResponse.json({ leads: [], total: 0, message: "No results found for this search." });
       }
 
-      // Fetch details for ALL collected place IDs
-      const details = await Promise.all(allPlaceIds.map(id => getPlaceDetails(id)));
-      const places  = details.filter(Boolean) as PlaceResult[];
+      const leads: LeadResult[] = await buildLeads(places, displayLoc);
+      const newPool: PoolEntry  = { leads, nextPageToken: nextToken, location: displayLoc };
 
-      pool = await buildLeads(places, displayLoc);
-      console.log(`Built ${pool.length} leads total from ${places.length} places`);
+      memWrite(cacheKey, newPool);
+      await dbWrite(cacheKey, newPool);
+      if (userEmail) saveLeadsToDB(leads, userEmail).catch(() => {});
 
-      // Cache the full pool
-      writeMemoryCache(cacheKey, pool, displayLoc);
-      writeDBCache(cacheKey, pool, displayLoc).catch(() => {});
+      console.log(`Page 1 done: ${leads.length} leads, nextToken=${!!nextToken}`);
 
-      // Save to DB
-      if (userEmail) saveLeadsToDB(pool, userEmail).catch(() => {});
+      const unseen   = leads.filter(l => !excludeSet.has(l.placeId));
+      const toReturn = unseen.slice(0, BATCH_SIZE);
+      return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: leads.length });
     }
 
-    // ── Filter: only return leads user hasn't seen yet ────────────────────────
-    const unseen = pool.filter(l => !excludeSet.has(l.placeId));
-
-    console.log(`Pool: ${pool.length} | Already seen: ${excludeSet.size} | Unseen: ${unseen.length}`);
-
-    if (unseen.length === 0) {
-      return NextResponse.json({
-        leads: [],
-        total: 0,
-        totalInPool: pool.length,
-        exhausted: true,
-        message: "You've seen all available leads for this search. Try a different keyword or location.",
-      });
+    // ── If we reach here: pool exists, no token, all leads seen ──────────────
+    if (unseenInPool.length > 0) {
+      const toReturn = unseenInPool.slice(0, BATCH_SIZE);
+      return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: pool.leads.length });
     }
 
-    // Return next batch of unseen leads
-    const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
-
+    console.log("Pool exhausted — no more pages available");
     return NextResponse.json({
-      leads: toReturn,
-      total: toReturn.length,
-      totalInPool: pool.length,
-      remainingUnseen: unseen.length - toReturn.length,
-      fromCache: true,
+      leads: [], total: 0, totalInPool: pool.leads.length, exhausted: true,
+      message: "You've seen all available leads for this search. Try a different keyword or location.",
     });
 
   } catch (error: any) {
