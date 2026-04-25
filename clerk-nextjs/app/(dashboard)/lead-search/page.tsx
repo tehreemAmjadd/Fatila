@@ -249,7 +249,7 @@ export default function LeadSearchPage() {
       // Session mein save karo taake page navigate karne pe bhi rahen
       saveResultsToSession(newLeads, keyword, location, industry);
 
-      // Is keyword+location ke liye seen mark karo
+      // Jo leads abhi return huin unhe seen mark karo (next search pe exclude hongi)
       if (email && newLeads.length > 0) {
         markLeadsAsSeen(email, keyword, location, newLeads.map(l => l.placeId));
       }
@@ -473,7 +473,7 @@ export default function LeadSearchPage() {
             ) : results.length === 0 ? (
               <div className="no-results">
                 <Search size={32} color="#8899bb" strokeWidth={1.4}/>
-                <p>No new results found for this search. All matching leads have already been shown to you. Try a different keyword or location.</p>
+                <p>No more new results for this search — all available leads have been shown. Try a different keyword or location.</p>
               </div>
             ) : (
               <div className="results-grid">

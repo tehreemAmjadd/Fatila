@@ -113,7 +113,8 @@ model CallLog {
 model SearchCache {
   id        String   @id @default(cuid())
   cacheKey  String   @unique
-  leadsJson String   
+  leadsJson String
+  nextPageToken String?  @db.Text    
   location  String
   createdAt DateTime @default(now())
   expiresAt DateTime
