@@ -1,31 +1,16 @@
 // app/api/leads/search/route.ts
 //
-// HOW PAGINATION WORKS:
-// ─────────────────────
-// Google Places returns max 20 results + a next_page_token per request.
-// The token only becomes valid ~2 seconds AFTER the first response —
-// which means we CANNOT fetch all pages in one server call (sleep doesn't
-// work reliably on serverless/Vercel).
+// PAGINATION STRATEGY:
+// On first search: fetch ALL available Google pages (up to 3 = 60 results)
+// synchronously using token polling. Cache all 60. Return first 20 unseen.
+// On repeat search: serve next 20 from cache. No extra Google API calls.
 //
-// Solution: store the next_page_token in the DB cache alongside the leads.
-// Each time the user searches the same keyword+location we:
-//   1. Return the cached leads filtered by what they've already seen.
-//   2. If a pagetoken exists, fire a background fetch for the NEXT page
-//      and append those results to the cache for the next call.
-//   3. If the current cached pool has no unseen leads left AND a token
-//      exists, we fetch the next page synchronously so this request
-//      itself returns new results.
-//
-// This way pagination is completely transparent to the user — they just
-// click "Search Leads" again and get the next batch.
-//
-// Prisma model needed (run `npx prisma db push` after adding):
-//
+// Prisma schema (add nextPageToken field if not already present):
 //  model SearchCache {
 //    id            String   @id @default(cuid())
 //    cacheKey      String   @unique
 //    leadsJson     String   @db.Text
-//    nextPageToken String?  @db.Text   // ← NEW FIELD
+//    nextPageToken String?  @db.Text
 //    location      String
 //    createdAt     DateTime @default(now())
 //    expiresAt     DateTime
@@ -42,12 +27,11 @@ const GOOGLE_API_KEY =
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
-const MEMORY_CACHE_TTL_MS = 30 * 60 * 1000; // 30 min
+const MEMORY_CACHE_TTL_MS = 30 * 60 * 1000;
 const DB_CACHE_TTL_HOURS  = 24;
+const RESULTS_PER_PAGE    = 20; // how many leads to show per search click
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface PlaceResult {
   place_id: string;
@@ -81,14 +65,11 @@ interface LeadResult {
 
 interface CacheEntry {
   leads: LeadResult[];
-  nextPageToken: string | null;
   location: string;
   expiresAt: number;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// In-memory cache (module-level, survives warm lambdas)
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── In-memory cache ──────────────────────────────────────────────────────────
 
 const memoryCache = new Map<string, CacheEntry>();
 
@@ -96,22 +77,21 @@ function toCacheKey(q: string) {
   return q.toLowerCase().trim().replace(/\s+/g, " ");
 }
 
-function readMemoryCache(key: string): CacheEntry | null {
+function readMemoryCache(key: string): LeadResult[] | null {
   const e = memoryCache.get(key);
   if (!e) return null;
   if (Date.now() > e.expiresAt) { memoryCache.delete(key); return null; }
-  return e;
+  console.log(`Memory cache HIT: "${key}" (${e.leads.length} leads)`);
+  return e.leads;
 }
 
-function writeMemoryCache(key: string, entry: Omit<CacheEntry, "expiresAt">) {
-  memoryCache.set(key, { ...entry, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS });
+function writeMemoryCache(key: string, leads: LeadResult[], location: string) {
+  memoryCache.set(key, { leads, location, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DB cache — stores leads + nextPageToken
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── DB cache ─────────────────────────────────────────────────────────────────
 
-async function readDBCache(key: string): Promise<CacheEntry | null> {
+async function readDBCache(key: string): Promise<LeadResult[] | null> {
   try {
     const row = await (db as any).searchCache.findUnique({ where: { cacheKey: key } });
     if (!row) return null;
@@ -119,36 +99,23 @@ async function readDBCache(key: string): Promise<CacheEntry | null> {
       (db as any).searchCache.delete({ where: { cacheKey: key } }).catch(() => {});
       return null;
     }
-    return {
-      leads: JSON.parse(row.leadsJson) as LeadResult[],
-      nextPageToken: row.nextPageToken ?? null,
-      location: row.location,
-      expiresAt: new Date(row.expiresAt).getTime(),
-    };
-  } catch {
-    return null;
-  }
+    console.log(`DB cache HIT: "${key}"`);
+    return JSON.parse(row.leadsJson) as LeadResult[];
+  } catch { return null; }
 }
 
-async function writeDBCache(
-  key: string,
-  leads: LeadResult[],
-  nextPageToken: string | null,
-  location: string
-) {
+async function writeDBCache(key: string, leads: LeadResult[], location: string) {
   try {
     const expiresAt = new Date(Date.now() + DB_CACHE_TTL_HOURS * 3600 * 1000);
     await (db as any).searchCache.upsert({
       where: { cacheKey: key },
-      update: { leadsJson: JSON.stringify(leads), nextPageToken, location, expiresAt },
-      create: { cacheKey: key, leadsJson: JSON.stringify(leads), nextPageToken, location, expiresAt },
+      update: { leadsJson: JSON.stringify(leads), location, expiresAt },
+      create: { cacheKey: key, leadsJson: JSON.stringify(leads), location, expiresAt },
     });
   } catch {}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AI query parser
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── AI Query Parser ──────────────────────────────────────────────────────────
 
 async function parseUserQuery(keyword: string, industry: string, location: string) {
   const parts = [keyword, industry, location].filter(Boolean);
@@ -161,25 +128,21 @@ async function parseUserQuery(keyword: string, industry: string, location: strin
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
       body: JSON.stringify({
         model: "gpt-4o-mini", max_tokens: 150,
-        messages: [{ role: "user", content: `Convert this lead search into a short Google Places query (3-6 words).
+        messages: [{ role: "user", content:
+          `Convert to a short Google Places query (3-6 words).
 Keyword: "${keyword}" | Industry: "${industry}" | Location: "${location}"
 Reply ONLY as JSON: {"searchQuery":"...","location":"..."}` }],
       }),
     });
     const d = await res.json();
-    const parsed = JSON.parse(d.choices?.[0]?.message?.content?.replace(/```json|```/g, "").trim() || "{}");
-    return {
-      searchQuery: parsed.searchQuery || parts.join(" "),
-      extractedLocation: parsed.location || location,
-    };
+    const parsed = JSON.parse(d.choices?.[0]?.message?.content?.replace(/```json|```/g,"").trim() || "{}");
+    return { searchQuery: parsed.searchQuery || parts.join(" "), extractedLocation: parsed.location || location };
   } catch {
     return { searchQuery: parts.join(" "), extractedLocation: location };
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Google Places helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── Google Places: fetch ALL pages upfront ───────────────────────────────────
 
 async function getPlaceDetails(placeId: string): Promise<PlaceResult | null> {
   const fields = "place_id,name,formatted_address,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,types,opening_hours";
@@ -194,67 +157,102 @@ async function getPlaceDetails(placeId: string): Promise<PlaceResult | null> {
 }
 
 /**
- * Fetch ONE page of Google Places results.
- * Pass `pagetoken` for page 2/3, omit for page 1 (uses `query`).
- * Returns { results, nextPageToken }.
+ * Poll for a pagetoken to become valid.
+ * Google says token is valid "shortly after" the previous response —
+ * typically 2-3 seconds. We retry up to 5 times with 2s gaps.
  */
-async function fetchOnePage(
-  query: string,
-  pagetoken?: string
-): Promise<{ results: PlaceResult[]; nextPageToken: string | null }> {
-  let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?key=${GOOGLE_API_KEY}`;
+async function fetchPageWithToken(token: string): Promise<{ placeIds: string[]; nextToken: string | null }> {
+  const MAX_RETRIES = 5;
+  const RETRY_DELAY = 2000;
 
-  if (pagetoken) {
-    url += `&pagetoken=${encodeURIComponent(pagetoken)}`;
-    console.log("Google Places: fetching page via pagetoken");
-  } else {
-    url += `&query=${encodeURIComponent(query)}`;
-    console.log("Google Places: fetching page 1 for:", query);
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    // Always wait before using a pagetoken
+    await new Promise(r => setTimeout(r, RETRY_DELAY));
+
+    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(token)}&key=${GOOGLE_API_KEY}`;
+    const res  = await fetch(url, { cache: "no-store" });
+    const data = await res.json();
+
+    console.log(`Pagetoken attempt ${attempt}: status=${data.status} results=${data.results?.length ?? 0}`);
+
+    if (data.status === "OK" && data.results?.length) {
+      return {
+        placeIds: data.results.map((r: any) => r.place_id).filter(Boolean),
+        nextToken: data.next_page_token ?? null,
+      };
+    }
+
+    if (data.status === "INVALID_REQUEST") {
+      // Token not ready yet — retry
+      console.log("Token not ready, retrying...");
+      continue;
+    }
+
+    // Any other status (ZERO_RESULTS, etc.) — stop
+    break;
   }
 
-  const res  = await fetch(url, { cache: "no-store" });
-  const data = await res.json();
-
-  console.log(`Google status: ${data.status} | results: ${data.results?.length ?? 0} | hasNextToken: ${!!data.next_page_token}`);
-
-  if (data.status !== "OK" || !data.results?.length) {
-    return { results: [], nextPageToken: null };
-  }
-
-  // Fetch full details for this page's places
-  const details = await Promise.all(
-    data.results.map((r: any) => getPlaceDetails(r.place_id))
-  );
-
-  return {
-    results: details.filter(Boolean) as PlaceResult[],
-    nextPageToken: data.next_page_token ?? null,
-  };
+  return { placeIds: [], nextToken: null };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Utility helpers
-// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Fetch ALL available Google Places results for a query.
+ * Returns up to 60 place IDs (3 pages × 20).
+ */
+async function fetchAllPlaceIds(query: string): Promise<string[]> {
+  const allIds: string[] = [];
+
+  // Page 1
+  const url1 = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
+  console.log(`Google Places page 1: "${query}"`);
+  const res1  = await fetch(url1, { cache: "no-store" });
+  const data1 = await res1.json();
+
+  console.log(`Page 1: status=${data1.status} results=${data1.results?.length ?? 0} hasToken=${!!data1.next_page_token}`);
+
+  if (data1.status !== "OK" || !data1.results?.length) return allIds;
+
+  for (const r of data1.results) { if (r.place_id) allIds.push(r.place_id); }
+
+  let nextToken: string | null = data1.next_page_token ?? null;
+
+  // Page 2
+  if (nextToken) {
+    console.log("Fetching page 2...");
+    const p2 = await fetchPageWithToken(nextToken);
+    for (const id of p2.placeIds) { if (!allIds.includes(id)) allIds.push(id); }
+    nextToken = p2.nextToken;
+
+    // Page 3
+    if (nextToken) {
+      console.log("Fetching page 3...");
+      const p3 = await fetchPageWithToken(nextToken);
+      for (const id of p3.placeIds) { if (!allIds.includes(id)) allIds.push(id); }
+    }
+  }
+
+  console.log(`Total place IDs collected: ${allIds.length}`);
+  return allIds;
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function guessEmail(website: string): string | null {
   if (!website) return null;
-  try {
-    return "info@" + website.replace(/https?:\/\//, "").split("/")[0].replace(/^www\./, "");
-  } catch { return null; }
+  try { return "info@" + website.replace(/https?:\/\//, "").split("/")[0].replace(/^www\./, ""); }
+  catch { return null; }
 }
 
 function inferIndustry(types: string[]): string {
-  const map: Record<string, string> = {
+  const map: Record<string,string> = {
     restaurant:"Food & Beverage", food:"Food & Beverage", cafe:"Food & Beverage",
     hospital:"Healthcare", doctor:"Healthcare", pharmacy:"Healthcare", dentist:"Healthcare",
-    school:"Education", university:"Education",
-    gym:"Fitness", spa:"Wellness",
+    school:"Education", university:"Education", gym:"Fitness", spa:"Wellness",
     store:"Retail", clothing_store:"Retail", shopping_mall:"Retail",
     bank:"Finance", finance:"Finance", accounting:"Finance",
     real_estate_agency:"Real Estate", car_dealer:"Automotive", car_repair:"Automotive",
     hotel:"Hospitality", lodging:"Hospitality", lawyer:"Legal", travel_agency:"Travel",
-    beauty_salon:"Beauty", hair_care:"Beauty",
-    electronics_store:"Technology", insurance_agency:"Finance",
+    beauty_salon:"Beauty", hair_care:"Beauty", electronics_store:"Technology", insurance_agency:"Finance",
   };
   for (const t of types) { if (map[t]) return map[t]; }
   return "Business";
@@ -274,13 +272,13 @@ function scorePlace(p: PlaceResult): number {
 
 async function generateAIInsight(
   place: PlaceResult, industry: string, priority: string,
-  score: number, displayLocation: string, email: string | null
+  score: number, loc: string, email: string | null
 ): Promise<string> {
   const phone = place.formatted_phone_number || place.international_phone_number || "";
   const base =
-    `${place.name} is a ${priority.toLowerCase()}-priority ${industry} lead in ${displayLocation} (score: ${score}/100).` +
+    `${place.name} is a ${priority.toLowerCase()}-priority ${industry} lead in ${loc} (score: ${score}/100).` +
     (place.rating ? ` Rated ${place.rating}⭐ by ${(place.user_ratings_total||0).toLocaleString()} customers.` : "") +
-    (place.website ? ` Website: ${place.website.replace(/https?:\/\//, "").split("/")[0]}.` : " No website — great cold outreach opportunity.") +
+    (place.website ? ` Website: ${place.website.replace(/https?:\/\//,"").split("/")[0]}.` : " No website — great cold outreach opportunity.") +
     (phone ? " Phone available." : " No phone listed.") +
     (email ? ` Suggested email: ${email}.` : "");
 
@@ -292,14 +290,13 @@ async function generateAIInsight(
       body: JSON.stringify({
         model: "gpt-4o-mini", max_tokens: 120, temperature: 0.7,
         messages: [{ role: "user", content:
-          `B2B sales analyst: write 2-3 sentences on why this is a good lead (no bullet points, no score mentions):
-Business: ${place.name} | Industry: ${industry} | Location: ${place.formatted_address || displayLocation}
+          `B2B analyst: 2-3 sentences on why this is a good lead (no bullets, no score):
+Business: ${place.name} | Industry: ${industry} | Location: ${place.formatted_address || loc}
 Types: ${(place.types||[]).join(", ")} | Rating: ${place.rating||"N/A"} (${place.user_ratings_total||0} reviews)
-Has Website: ${place.website?"Yes":"No"} | Has Phone: ${phone?"Yes":"No"}`
-        }],
+Has Website: ${place.website?"Yes":"No"} | Has Phone: ${phone?"Yes":"No"}` }],
       }),
     });
-    const d    = await res.json();
+    const d = await res.json();
     const text = d.choices?.[0]?.message?.content?.trim() || "";
     if (!text) return base;
     return `${text}\n\n📊 Score: ${score}/100 · Priority: ${priority}` +
@@ -309,31 +306,25 @@ Has Website: ${place.website?"Yes":"No"} | Has Phone: ${phone?"Yes":"No"}`
   } catch { return base; }
 }
 
-async function buildLeadsFromPlaces(
-  places: PlaceResult[], displayLocation: string
-): Promise<LeadResult[]> {
-  const BATCH = 10;
+async function buildLeads(places: PlaceResult[], loc: string): Promise<LeadResult[]> {
   const out: LeadResult[] = [];
-  for (let i = 0; i < places.length; i += BATCH) {
-    const batch = await Promise.all(
-      places.slice(i, i + BATCH).map(async place => {
-        const score    = scorePlace(place);
-        const priority = score >= 70 ? "High" : score >= 45 ? "Medium" : "Low";
-        const phone    = place.formatted_phone_number || place.international_phone_number || "";
-        const ind      = inferIndustry(place.types || []);
-        const email    = guessEmail(place.website || "");
-        const insight  = await generateAIInsight(place, ind, priority, score, displayLocation, email);
-        return {
-          placeId: place.place_id, company: place.name,
-          address: place.formatted_address || "", phone, email,
-          website: place.website || "", industry: ind,
-          rating: place.rating || null, reviewCount: place.user_ratings_total || 0,
-          score, priority, aiInsight: insight,
-          linkedinUrl: `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(place.name)}`,
-          fromCache: false,
-        };
-      })
-    );
+  for (let i = 0; i < places.length; i += 10) {
+    const batch = await Promise.all(places.slice(i, i+10).map(async p => {
+      const score    = scorePlace(p);
+      const priority = score >= 70 ? "High" : score >= 45 ? "Medium" : "Low";
+      const phone    = p.formatted_phone_number || p.international_phone_number || "";
+      const ind      = inferIndustry(p.types || []);
+      const email    = guessEmail(p.website || "");
+      const insight  = await generateAIInsight(p, ind, priority, score, loc, email);
+      return {
+        placeId: p.place_id, company: p.name, address: p.formatted_address || "",
+        phone, email, website: p.website || "", industry: ind,
+        rating: p.rating || null, reviewCount: p.user_ratings_total || 0,
+        score, priority, aiInsight: insight,
+        linkedinUrl: `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(p.name)}`,
+        fromCache: false,
+      };
+    }));
     out.push(...batch);
   }
   return out;
@@ -350,10 +341,9 @@ async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
           await (db as any).lead.create({
             data: {
               userId: user.id, company: lead.company, address: lead.address,
-              phone: lead.phone || null, email: lead.email || null,
-              website: lead.website || null, industry: lead.industry,
-              score: lead.score, priority: lead.priority, aiInsights: lead.aiInsight,
-              source: "google_maps", placeId: lead.placeId,
+              phone: lead.phone||null, email: lead.email||null, website: lead.website||null,
+              industry: lead.industry, score: lead.score, priority: lead.priority,
+              aiInsights: lead.aiInsight, source: "google_maps", placeId: lead.placeId,
               linkedinUrl: lead.linkedinUrl, saved: false, status: "new",
             },
           });
@@ -363,9 +353,7 @@ async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
   } catch {}
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN POST HANDLER
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
@@ -384,126 +372,67 @@ export async function POST(req: NextRequest) {
     }
 
     const { searchQuery, extractedLocation } = await parseUserQuery(keyword, industry, location);
-    const cacheKey       = toCacheKey(searchQuery);
-    const displayLoc     = extractedLocation || location || "this area";
-    const excludeSet     = new Set<string>(excludePlaceIds);
+    const cacheKey   = toCacheKey(searchQuery);
+    const displayLoc = extractedLocation || location || "this area";
+    const excludeSet = new Set<string>(excludePlaceIds);
 
-    // ── Load cache ────────────────────────────────────────────────────────────
-    let cached = readMemoryCache(cacheKey);
-    if (!cached) {
-      const dbRow = await readDBCache(cacheKey);
-      if (dbRow) {
-        cached = dbRow;
-        writeMemoryCache(cacheKey, dbRow);
-      }
+    // ── Load full pool from cache ─────────────────────────────────────────────
+    let pool: LeadResult[] | null = readMemoryCache(cacheKey);
+
+    if (!pool) {
+      pool = await readDBCache(cacheKey);
+      if (pool) writeMemoryCache(cacheKey, pool, displayLoc);
     }
 
-    // ── Determine which leads are unseen from current pool ────────────────────
-    const currentPool  = cached?.leads ?? [];
-    const unseenLeads  = currentPool.filter(l => !excludeSet.has(l.placeId));
-    const pendingToken = cached?.nextPageToken ?? null;
+    // ── If no cache: fetch ALL pages from Google now ──────────────────────────
+    if (!pool) {
+      console.log("Cache miss — fetching all pages from Google...");
 
-    console.log(`Pool: ${currentPool.length} | Unseen: ${unseenLeads.length} | HasNextToken: ${!!pendingToken}`);
+      const allPlaceIds = await fetchAllPlaceIds(searchQuery);
 
-    // ── Case 1: We have unseen leads to show — return them ────────────────────
-    // But also kick off background fetch of next page if token exists
-    if (unseenLeads.length > 0) {
-      // Background: fetch next page and append to cache (non-blocking)
-      // This pre-loads page 2 while the user is reviewing page 1 results
-      if (pendingToken) {
-        (async () => {
-          try {
-            console.log("Background: fetching next page...");
-            const { results: nextPlaces, nextPageToken: newToken } = await fetchOnePage(searchQuery, pendingToken);
-            if (nextPlaces.length > 0) {
-              const nextLeads = await buildLeadsFromPlaces(nextPlaces, displayLoc);
-              // Deduplicate before appending
-              const existingIds = new Set(currentPool.map(l => l.placeId));
-              const fresh = nextLeads.filter(l => !existingIds.has(l.placeId));
-              const updatedPool = [...currentPool, ...fresh];
-              writeMemoryCache(cacheKey, { leads: updatedPool, nextPageToken: newToken, location: displayLoc });
-              await writeDBCache(cacheKey, updatedPool, newToken, displayLoc);
-              if (userEmail) await saveLeadsToDB(fresh, userEmail);
-              console.log(`Background: appended ${fresh.length} new leads. Token now: ${!!newToken}`);
-            }
-          } catch (e) { console.error("Background fetch error:", e); }
-        })();
+      if (!allPlaceIds.length) {
+        return NextResponse.json({ leads: [], total: 0, message: "No results found" });
       }
 
+      // Fetch details for ALL collected place IDs
+      const details = await Promise.all(allPlaceIds.map(id => getPlaceDetails(id)));
+      const places  = details.filter(Boolean) as PlaceResult[];
+
+      pool = await buildLeads(places, displayLoc);
+      console.log(`Built ${pool.length} leads total from ${places.length} places`);
+
+      // Cache the full pool
+      writeMemoryCache(cacheKey, pool, displayLoc);
+      writeDBCache(cacheKey, pool, displayLoc).catch(() => {});
+
+      // Save to DB
+      if (userEmail) saveLeadsToDB(pool, userEmail).catch(() => {});
+    }
+
+    // ── Filter: only return leads user hasn't seen yet ────────────────────────
+    const unseen = pool.filter(l => !excludeSet.has(l.placeId));
+
+    console.log(`Pool: ${pool.length} | Already seen: ${excludeSet.size} | Unseen: ${unseen.length}`);
+
+    if (unseen.length === 0) {
       return NextResponse.json({
-        leads: unseenLeads,
-        total: unseenLeads.length,
-        totalInPool: currentPool.length,
-        hasMore: !!pendingToken,
-        fromCache: true,
+        leads: [],
+        total: 0,
+        totalInPool: pool.length,
+        exhausted: true,
+        message: "You've seen all available leads for this search. Try a different keyword or location.",
       });
     }
 
-    // ── Case 2: All cached leads already seen, but next page token exists ─────
-    // Fetch next page synchronously so user gets new results NOW
-    if (pendingToken) {
-      console.log("All cached leads seen — fetching next page synchronously...");
-      const { results: nextPlaces, nextPageToken: newToken } = await fetchOnePage(searchQuery, pendingToken);
+    // Return next batch of unseen leads
+    const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
 
-      if (nextPlaces.length > 0) {
-        const nextLeads = await buildLeadsFromPlaces(nextPlaces, displayLoc);
-        const existingIds = new Set(currentPool.map(l => l.placeId));
-        const fresh = nextLeads.filter(l => !existingIds.has(l.placeId));
-        const updatedPool = [...currentPool, ...fresh];
-
-        writeMemoryCache(cacheKey, { leads: updatedPool, nextPageToken: newToken, location: displayLoc });
-        await writeDBCache(cacheKey, updatedPool, newToken, displayLoc);
-        if (userEmail) await saveLeadsToDB(fresh, userEmail);
-
-        // Return only the fresh (unseen) ones
-        const freshUnseen = fresh.filter(l => !excludeSet.has(l.placeId));
-        console.log(`Next page fetched: ${fresh.length} new leads, ${freshUnseen.length} unseen`);
-
-        return NextResponse.json({
-          leads: freshUnseen,
-          total: freshUnseen.length,
-          totalInPool: updatedPool.length,
-          hasMore: !!newToken,
-          fromCache: false,
-        });
-      }
-    }
-
-    // ── Case 3: No cache at all — first ever search ───────────────────────────
-    if (currentPool.length === 0) {
-      console.log("No cache — fetching page 1 from Google...");
-      const { results: places, nextPageToken: token } = await fetchOnePage(searchQuery);
-
-      if (!places.length) {
-        return NextResponse.json({ leads: [], total: 0, hasMore: false, message: "No results found" });
-      }
-
-      const leads = await buildLeadsFromPlaces(places, displayLoc);
-      writeMemoryCache(cacheKey, { leads, nextPageToken: token, location: displayLoc });
-      await writeDBCache(cacheKey, leads, token, displayLoc);
-      if (userEmail) await saveLeadsToDB(leads, userEmail);
-
-      const unseen = leads.filter(l => !excludeSet.has(l.placeId));
-      console.log(`Page 1 done: ${leads.length} leads, token: ${!!token}`);
-
-      return NextResponse.json({
-        leads: unseen,
-        total: unseen.length,
-        totalInPool: leads.length,
-        hasMore: !!token,
-        fromCache: false,
-      });
-    }
-
-    // ── Case 4: Pool exhausted, no more pages ─────────────────────────────────
-    console.log("All leads exhausted — no more pages available");
     return NextResponse.json({
-      leads: [],
-      total: 0,
-      totalInPool: currentPool.length,
-      hasMore: false,
-      exhausted: true,
-      message: "No more results available for this search. Try a different keyword or location.",
+      leads: toReturn,
+      total: toReturn.length,
+      totalInPool: pool.length,
+      remainingUnseen: unseen.length - toReturn.length,
+      fromCache: true,
     });
 
   } catch (error: any) {
