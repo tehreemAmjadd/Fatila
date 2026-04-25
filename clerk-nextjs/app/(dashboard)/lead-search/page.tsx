@@ -97,23 +97,29 @@ function loadResultsFromSession(): {
   }
 }
 
-// ─── User-specific seen leads helpers ─────────────────────────────────────
-// Jo leads user pehle dekh chuka hai unhe filter kiya jata hai
+// ─── Query-specific seen leads helpers ────────────────────────────────────
+// Har keyword+location combination ka apna seen pool hai
+// Taake "Software Companies Lahore" aur "Dental Clinics Dubai" alag track hon
 
-function getSeenLeadIds(userEmail: string): Set<string> {
+function makeSeenKey(userEmail: string, keyword: string, location: string): string {
+  const k = (keyword + "_" + location).toLowerCase().trim().replace(/\s+/g, "_");
+  return `seenLeads_${userEmail}_${k}`;
+}
+
+function getSeenLeadIds(userEmail: string, keyword: string, location: string): Set<string> {
   try {
-    const raw = sessionStorage.getItem(`seenLeads_${userEmail}`);
+    const raw = sessionStorage.getItem(makeSeenKey(userEmail, keyword, location));
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch {
     return new Set();
   }
 }
 
-function markLeadsAsSeen(userEmail: string, placeIds: string[]) {
+function markLeadsAsSeen(userEmail: string, keyword: string, location: string, placeIds: string[]) {
   try {
-    const existing = getSeenLeadIds(userEmail);
+    const existing = getSeenLeadIds(userEmail, keyword, location);
     placeIds.forEach(id => existing.add(id));
-    sessionStorage.setItem(`seenLeads_${userEmail}`, JSON.stringify([...existing]));
+    sessionStorage.setItem(makeSeenKey(userEmail, keyword, location), JSON.stringify([...existing]));
   } catch {}
 }
 
@@ -219,8 +225,9 @@ export default function LeadSearchPage() {
     setSearched(true);
     setSaveError("");
 
-    // Jo leads user pehle dekh chuka hai unki IDs collect karo
-    const seenIds = email ? [...getSeenLeadIds(email)] : [];
+    // Sirf is keyword+location combination ki seen leads exclude karo
+    // Alag keywords ki leads mix nahi hoti
+    const seenIds = email ? [...getSeenLeadIds(email, keyword, location)] : [];
 
     try {
       const res = await fetch("/api/leads/search", {
@@ -231,7 +238,7 @@ export default function LeadSearchPage() {
           location,
           keyword,
           email,
-          excludePlaceIds: seenIds, // ← server ko batao kon si leads already dekhi hain
+          excludePlaceIds: seenIds,
         }),
       });
       const data = await res.json();
@@ -242,9 +249,9 @@ export default function LeadSearchPage() {
       // Session mein save karo taake page navigate karne pe bhi rahen
       saveResultsToSession(newLeads, keyword, location, industry);
 
-      // Is search ki leads bhi "seen" mark karo
+      // Is keyword+location ke liye seen mark karo
       if (email && newLeads.length > 0) {
-        markLeadsAsSeen(email, newLeads.map(l => l.placeId));
+        markLeadsAsSeen(email, keyword, location, newLeads.map(l => l.placeId));
       }
 
       await fetchUser();
