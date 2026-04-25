@@ -1,24 +1,15 @@
 // app/api/leads/search/route.ts
 //
-// KEY INSIGHT FROM LOGS: Google's next_page_token expires in ~5 minutes.
-// Saving it to DB and using it later always fails with INVALID_REQUEST.
+// APPROACH: Run 3 parallel Google queries per search to get ~60 results.
+// No pagination tokens needed — tokens expire and are unreliable.
 //
-// SOLUTION: On first search, fetch ALL 3 pages IMMEDIATELY while the token
-// is still fresh (within seconds). Cache all 60 results in DB.
-// Subsequent searches just slice from the cached pool — no Google API needed.
+// Query variations are generated automatically:
+//   "software companies pakistan"
+//   "software houses pakistan"  
+//   "IT firms pakistan"
 //
-// Page 2/3 tokens need ~2s to activate after page 1 response.
-// We wait exactly 2s then retry up to 3 times before giving up on that page.
-//
-// Prisma model (nextPageToken field no longer needed but harmless if present):
-//  model SearchCache {
-//    id          String   @id @default(cuid())
-//    cacheKey    String   @unique
-//    leadsJson   String   @db.Text
-//    location    String
-//    createdAt   DateTime @default(now())
-//    expiresAt   DateTime
-//  }
+// All results are deduplicated by placeId and cached.
+// Each subsequent search returns the next unseen batch of 20.
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -101,7 +92,7 @@ async function dbRead(key: string): Promise<LeadResult[] | null> {
     const leads = JSON.parse(row.leadsJson) as LeadResult[];
     console.log(`DB HIT: "${key}" (${leads.length} leads)`);
     return leads;
-  } catch (e) { console.error("DB read error:", e); return null; }
+  } catch (e) { console.error("DB read:", e); return null; }
 }
 
 async function dbWrite(key: string, leads: LeadResult[], location: string) {
@@ -112,13 +103,11 @@ async function dbWrite(key: string, leads: LeadResult[], location: string) {
       update: { leadsJson: JSON.stringify(leads), location, expiresAt },
       create: { cacheKey: key, leadsJson: JSON.stringify(leads), location, expiresAt },
     });
-    console.log(`DB WRITE: ${leads.length} leads saved`);
-  } catch (e) { console.error("DB write error:", e); }
+    console.log(`DB WRITE: ${leads.length} leads`);
+  } catch (e) { console.error("DB write:", e); }
 }
 
-// ─── Google Places: fetch all pages while tokens are fresh ───────────────────
-
-function sleep(ms: number) { return new Promise(r => setTimeout(r, ms)); }
+// ─── Google Places ────────────────────────────────────────────────────────────
 
 async function getDetails(placeId: string): Promise<PlaceResult | null> {
   const fields = "place_id,name,formatted_address,formatted_phone_number,international_phone_number,website,rating,user_ratings_total,types,opening_hours";
@@ -133,64 +122,113 @@ async function getDetails(placeId: string): Promise<PlaceResult | null> {
 }
 
 /**
- * Fetch a page using a pagetoken. Token needs ~2s to activate.
- * Retry up to 4 times with 2s gaps = max 8s wait.
- * MUST be called immediately after receiving the token (within 5 min expiry).
+ * Fetch one Google Places text search page (no pagination).
+ * Returns up to 20 place IDs.
  */
-async function fetchPageByToken(token: string): Promise<{ placeIds: string[]; nextToken: string | null }> {
-  for (let i = 1; i <= 4; i++) {
-    await sleep(2000); // wait for token to activate
-    const url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(token)}&key=${GOOGLE_API_KEY}`;
+async function fetchOnePage(query: string): Promise<string[]> {
+  try {
+    const url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
     const res  = await fetch(url, { cache: "no-store" });
     const data = await res.json();
-    console.log(`  Token attempt ${i}: status=${data.status} results=${data.results?.length ?? 0}`);
-    if (data.status === "OK" && data.results?.length) {
-      return {
-        placeIds: data.results.map((r: any) => r.place_id).filter(Boolean),
-        nextToken: data.next_page_token ?? null,
-      };
-    }
-    if (data.status !== "INVALID_REQUEST") break; // e.g. ZERO_RESULTS — stop
+    console.log(`Query "${query}": status=${data.status} results=${data.results?.length ?? 0}`);
+    if (data.status !== "OK" || !data.results?.length) return [];
+    return data.results.map((r: any) => r.place_id).filter(Boolean);
+  } catch (e) {
+    console.error(`fetchOnePage error for "${query}":`, e);
+    return [];
   }
-  return { placeIds: [], nextToken: null };
 }
 
 /**
- * Fetch ALL available Google Places results in one go.
- * All page fetches happen immediately while tokens are fresh.
- * Returns up to 60 place IDs.
+ * Generate 3 query variations for a search term to get more results
+ * without relying on pagination tokens.
  */
-async function fetchAllPlaceIdsNow(query: string): Promise<string[]> {
+function generateQueryVariations(keyword: string, location: string): string[] {
+  const kw = keyword.toLowerCase().trim();
+  const loc = location.trim();
+
+  // Common synonym maps
+  const synonyms: Record<string, string[]> = {
+    "software companies":  ["software houses", "software firms", "IT companies"],
+    "software company":    ["software house", "software firm", "IT company"],
+    "software house":      ["software company", "software firm", "IT firm"],
+    "software houses":     ["software companies", "IT companies", "tech companies"],
+    "it companies":        ["software companies", "tech companies", "IT firms"],
+    "it company":          ["software company", "tech company", "IT firm"],
+    "dental clinic":       ["dentist", "dental center", "dental office"],
+    "dental clinics":      ["dentists", "dental centers", "dental offices"],
+    "restaurant":          ["cafe", "eatery", "food place"],
+    "restaurants":         ["cafes", "eateries", "food places"],
+    "law firm":            ["lawyer", "legal firm", "attorney"],
+    "law firms":           ["lawyers", "legal firms", "attorneys"],
+    "real estate":         ["property dealer", "real estate agency", "property agent"],
+    "hospital":            ["clinic", "medical center", "healthcare center"],
+    "hospitals":           ["clinics", "medical centers", "healthcare centers"],
+    "gym":                 ["fitness center", "health club", "workout center"],
+    "gyms":                ["fitness centers", "health clubs", "workout centers"],
+    "school":              ["academy", "institute", "educational center"],
+    "schools":             ["academies", "institutes", "educational centers"],
+    "hotel":               ["guest house", "inn", "lodging"],
+    "hotels":              ["guest houses", "inns", "lodgings"],
+    "marketing agency":    ["digital agency", "advertising agency", "marketing firm"],
+    "marketing agencies":  ["digital agencies", "advertising agencies", "marketing firms"],
+    "construction":        ["builder", "contractor", "construction company"],
+    "pharmacy":            ["chemist", "drugstore", "medical store"],
+    "pharmacies":          ["chemists", "drugstores", "medical stores"],
+  };
+
+  // Look for a synonym match
+  let variations: string[] = [];
+  for (const [key, syns] of Object.entries(synonyms)) {
+    if (kw.includes(key)) {
+      variations = syns.map(s => kw.replace(key, s));
+      break;
+    }
+  }
+
+  // Fallback: add common suffixes/prefixes
+  if (!variations.length) {
+    variations = [
+      `${kw} company`,
+      `best ${kw}`,
+    ];
+  }
+
+  // Build 3 queries: original + 2 variations, all with location
+  const queries = [
+    `${kw} ${loc}`,
+    `${variations[0]} ${loc}`,
+    `${variations[1] || variations[0]} ${loc}`,
+  ];
+
+  // Deduplicate
+  return [...new Set(queries)];
+}
+
+/**
+ * Fetch ~60 unique place IDs by running 3 parallel queries.
+ * No page tokens — completely reliable.
+ */
+async function fetchAllPlaceIds(keyword: string, location: string): Promise<string[]> {
+  const queries = generateQueryVariations(keyword, location);
+  console.log("Running parallel queries:", queries);
+
+  // Run all 3 queries in parallel
+  const results = await Promise.all(queries.map(q => fetchOnePage(q)));
+
+  // Merge and deduplicate
+  const seen = new Set<string>();
   const allIds: string[] = [];
+  for (const ids of results) {
+    for (const id of ids) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        allIds.push(id);
+      }
+    }
+  }
 
-  // Page 1
-  const url1  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
-  console.log(`Google page 1: "${query}"`);
-  const res1  = await fetch(url1, { cache: "no-store" });
-  const data1 = await res1.json();
-  console.log(`Page 1: status=${data1.status} results=${data1.results?.length ?? 0} hasToken=${!!data1.next_page_token}`);
-
-  if (data1.status !== "OK" || !data1.results?.length) return allIds;
-  for (const r of data1.results) if (r.place_id) allIds.push(r.place_id);
-
-  const token1 = data1.next_page_token;
-  if (!token1) { console.log("No page 2 token"); return allIds; }
-
-  // Page 2 — use token immediately while it's fresh
-  console.log("Fetching page 2...");
-  const { placeIds: ids2, nextToken: token2 } = await fetchPageByToken(token1);
-  for (const id of ids2) if (!allIds.includes(id)) allIds.push(id);
-  console.log(`Page 2: got ${ids2.length} results`);
-
-  if (!token2) { console.log("No page 3 token"); return allIds; }
-
-  // Page 3 — use token immediately
-  console.log("Fetching page 3...");
-  const { placeIds: ids3 } = await fetchPageByToken(token2);
-  for (const id of ids3) if (!allIds.includes(id)) allIds.push(id);
-  console.log(`Page 3: got ${ids3.length} results`);
-
-  console.log(`Total place IDs: ${allIds.length}`);
+  console.log(`Total unique place IDs from ${queries.length} queries: ${allIds.length}`);
   return allIds;
 }
 
@@ -289,27 +327,6 @@ async function buildLeads(places: PlaceResult[], loc: string): Promise<LeadResul
   return out;
 }
 
-async function parseUserQuery(keyword: string, industry: string, location: string) {
-  const parts = [keyword, industry, location].filter(Boolean);
-  if (!OPENAI_API_KEY || keyword.trim().split(/\s+/).length <= 4) {
-    return { searchQuery: parts.join(" "), extractedLocation: location };
-  }
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini", max_tokens: 100,
-        messages: [{ role: "user", content:
-          `Short Google Places query (3-6 words) for: keyword="${keyword}" industry="${industry}" location="${location}". Reply ONLY as JSON: {"searchQuery":"...","location":"..."}` }],
-      }),
-    });
-    const d = await res.json();
-    const p = JSON.parse(d.choices?.[0]?.message?.content?.replace(/```json|```/g,"").trim()||"{}");
-    return { searchQuery: p.searchQuery||parts.join(" "), extractedLocation: p.location||location };
-  } catch { return { searchQuery: parts.join(" "), extractedLocation: location }; }
-}
-
 async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
   try {
     const user = await db.user.findUnique({ where: { email: userEmail } }).catch(() => null);
@@ -351,12 +368,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Provide at least a location or keyword", leads: [] }, { status: 400 });
     }
 
-    const { searchQuery, extractedLocation } = await parseUserQuery(keyword, industry, location);
-    const cacheKey   = toCacheKey(searchQuery);
-    const displayLoc = extractedLocation || location || "this area";
+    // Use keyword + location as cache key (not AI-parsed, to keep it consistent)
+    const rawKeyword = (keyword || industry).toLowerCase().trim();
+    const rawLocation = location.toLowerCase().trim();
+    const cacheKey   = toCacheKey(`${rawKeyword} ${rawLocation}`);
+    const displayLoc = location || "this area";
     const excludeSet = new Set<string>(excludePlaceIds);
 
-    console.log(`\n=== SEARCH: "${searchQuery}" | excluded=${excludeSet.size} ===`);
+    console.log(`\n=== SEARCH: "${cacheKey}" | excluded=${excludeSet.size} ===`);
 
     // ── Load pool from cache ──────────────────────────────────────────────────
     let pool = memRead(cacheKey);
@@ -365,7 +384,7 @@ export async function POST(req: NextRequest) {
       if (pool) memWrite(cacheKey, pool);
     }
 
-    // ── If cache exists: return next unseen batch ────────────────────────────
+    // ── Cache hit: return next unseen batch ───────────────────────────────────
     if (pool && pool.length > 0) {
       const unseen = pool.filter(l => !excludeSet.has(l.placeId));
       console.log(`Pool: ${pool.length} | Unseen: ${unseen.length}`);
@@ -381,35 +400,33 @@ export async function POST(req: NextRequest) {
         });
       }
 
-      // All cached leads seen — nothing more to show
-      console.log("All cached leads seen, pool exhausted");
+      console.log("All cached leads seen");
       return NextResponse.json({
         leads: [], total: 0, totalInPool: pool.length, exhausted: true,
         message: "You've seen all available leads for this search. Try a different keyword or location.",
       });
     }
 
-    // ── No cache: fetch ALL pages from Google RIGHT NOW ───────────────────────
-    // All 3 pages fetched immediately so tokens don't expire
-    console.log("No cache — fetching all Google pages now...");
+    // ── No cache: run 3 parallel Google queries ───────────────────────────────
+    console.log("No cache — running 3 parallel Google queries...");
 
-    const allPlaceIds = await fetchAllPlaceIdsNow(searchQuery);
+    const allPlaceIds = await fetchAllPlaceIds(rawKeyword, rawLocation);
 
     if (!allPlaceIds.length) {
       return NextResponse.json({ leads: [], total: 0, message: "No results found for this search." });
     }
 
-    // Fetch details for all collected places in parallel
+    // Fetch details for all places in parallel
     console.log(`Fetching details for ${allPlaceIds.length} places...`);
-    const details = await Promise.all(allPlaceIds.map(id => getDetails(id)));
-    const places  = details.filter(Boolean) as PlaceResult[];
+    const details  = await Promise.all(allPlaceIds.map(id => getDetails(id)));
+    const places   = details.filter(Boolean) as PlaceResult[];
 
     // Build leads with AI insights
     console.log(`Building leads for ${places.length} places...`);
     const allLeads = await buildLeads(places, displayLoc);
-    console.log(`Built ${allLeads.length} total leads`);
+    console.log(`Total leads built: ${allLeads.length}`);
 
-    // Save full pool to cache
+    // Cache full pool
     memWrite(cacheKey, allLeads);
     dbWrite(cacheKey, allLeads, displayLoc).catch(() => {});
     if (userEmail) saveLeadsToDB(allLeads, userEmail).catch(() => {});
@@ -417,8 +434,7 @@ export async function POST(req: NextRequest) {
     // Return first batch
     const unseen   = allLeads.filter(l => !excludeSet.has(l.placeId));
     const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
-
-    console.log(`Returning first ${toReturn.length} of ${allLeads.length} total leads`);
+    console.log(`Returning first ${toReturn.length} of ${allLeads.length}`);
 
     return NextResponse.json({
       leads: toReturn,
