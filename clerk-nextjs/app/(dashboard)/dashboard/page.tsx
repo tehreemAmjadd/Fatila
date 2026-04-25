@@ -5,8 +5,19 @@ import { useUser } from "@clerk/nextjs";
 import {
   Bot, Search, Bookmark, Shield, Target, Flame, Star, TrendingUp,
   Lock, ChevronRight, AlertTriangle, CheckSquare, Upload, Mail,
-  Megaphone, Users, CreditCard,
+  Megaphone, Users, CreditCard, Globe, Activity, BarChart2, MousePointer,
 } from "lucide-react";
+
+// ─── GA Types ─────────────────────────────────────────────────────────────────
+interface GAData {
+  totalUsers:     number;
+  newUsers:       number;
+  activeUsers:    number;
+  sessions:       number;
+  trafficSources: { source: string; sessions: number }[];
+  topCountries:   { country: string; users: number }[];
+  pageViews:      number;
+}
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
 const PLAN_CONFIG = {
@@ -28,6 +39,11 @@ export default function DashboardPage() {
   const [loading,    setLoading]    = useState(true);
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [planStats,  setPlanStats]  = useState<Record<string,number>>({});
+
+  // Google Analytics state — only fetched for admin
+  const [gaData,    setGaData]    = useState<GAData | null>(null);
+  const [gaLoading, setGaLoading] = useState(false);
+  const [gaError,   setGaError]   = useState("");
 
   const email = user?.primaryEmailAddress?.emailAddress;
 
@@ -55,6 +71,19 @@ export default function DashboardPage() {
     finally { setLoading(false); }
   };
 
+  // ── fetchGA — calls /api/admin/analytics which wraps GA Data API ────────
+  const fetchGA = async () => {
+    setGaLoading(true);
+    setGaError("");
+    try {
+      const res  = await fetch("/api/admin/analytics");
+      const data = await res.json();
+      if (data.error) { setGaError(data.error); return; }
+      setGaData(data);
+    } catch { setGaError("Could not load analytics data."); }
+    finally  { setGaLoading(false); }
+  };
+
   // Initial load
   useEffect(() => {
     if (!email) return;
@@ -77,6 +106,14 @@ export default function DashboardPage() {
     const id = setInterval(() => fetchStats(email), 20_000);
     return () => clearInterval(id);
   }, [email]);
+
+  // Fetch GA when admin confirmed, refresh every 30s for real-time active users
+  useEffect(() => {
+    if (!dbUser || dbUser.role !== "admin") return;
+    fetchGA();
+    const id = setInterval(fetchGA, 30_000);
+    return () => clearInterval(id);
+  }, [dbUser]);
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const isAdmin   = dbUser?.role === "admin";
@@ -316,6 +353,114 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                {/* ── GOOGLE ANALYTICS SECTION ── */}
+                <div className="ga-section">
+                  <div className="ga-section-hdr">
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <BarChart2 size={15} color="#3b9eff"/>
+                      <span className="ga-title">Website Analytics</span>
+                      <span className="ga-badge">Last 7 days</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span className="live-dot-wrap">
+                        <span className="live-dot"/>
+                        <span className="live-label">Live</span>
+                      </span>
+                      <button className="ga-refresh" onClick={fetchGA} disabled={gaLoading}>
+                        {gaLoading ? "Loading…" : "↻ Refresh"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {gaError && (
+                    <div className="ga-error">
+                      <AlertTriangle size={13} color="#ff6b6b"/>
+                      <span>{gaError} — Check /api/admin/analytics setup.</span>
+                    </div>
+                  )}
+
+                  {gaLoading && !gaData && (
+                    <div className="ga-skeleton-row">
+                      {[...Array(4)].map((_,i)=><div key={i} className="ga-skeleton"/>)}
+                    </div>
+                  )}
+
+                  {gaData && (
+                    <>
+                      {/* 4 stat cards */}
+                      <div className="ga-stats-grid">
+                        {[
+                          { Icon:Users,       label:"Total Users",      value:gaData.totalUsers,  color:"#00ff99" },
+                          { Icon:MousePointer,label:"New Users",         value:gaData.newUsers,    color:"#3b9eff" },
+                          { Icon:Globe,       label:"Sessions",          value:gaData.sessions,    color:"#ffd700" },
+                          { Icon:Activity,    label:"Active Right Now",  value:gaData.activeUsers, color:"#00ff99", highlight:true },
+                        ].map(({Icon,label,value,color,highlight})=>(
+                          <div key={label} className="ga-stat-card" style={highlight?{border:"1px solid rgba(0,255,153,.25)",background:"rgba(0,255,153,.05)"}:{}}>
+                            <div className="ga-stat-icon" style={{background:`${color}18`,border:`1px solid ${color}30`}}>
+                              <Icon size={16} color={color}/>
+                            </div>
+                            <div>
+                              <h4 className="ga-num" style={highlight?{color}:{}}>{value.toLocaleString()}</h4>
+                              <p className="ga-lbl">{label}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Traffic sources + Countries */}
+                      <div className="ga-bottom-grid">
+                        <div className="ga-card">
+                          <p className="ga-card-title">Traffic Sources (Sessions)</p>
+                          <div className="ga-list">
+                            {gaData.trafficSources.length === 0 && <p style={{color:"#8899bb",fontSize:12}}>No data</p>}
+                            {gaData.trafficSources.map((s,i)=>{
+                              const total = gaData.trafficSources.reduce((a,b)=>a+b.sessions,0);
+                              const pct   = total>0 ? Math.round((s.sessions/total)*100) : 0;
+                              const cols  = ["#3b9eff","#00ff99","#a78bfa","#ffd700","#ff6b6b","#8899bb"];
+                              const c     = cols[i%cols.length];
+                              return (
+                                <div key={i} className="ga-list-row">
+                                  <div className="ga-list-left">
+                                    <span className="ga-dot" style={{background:c}}/>
+                                    <span className="ga-name">{s.source}</span>
+                                  </div>
+                                  <div className="ga-list-right">
+                                    <div className="ga-bar-wrap"><div className="ga-bar-fill" style={{width:`${pct}%`,background:c}}/></div>
+                                    <span className="ga-val">{s.sessions}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="ga-card">
+                          <p className="ga-card-title">Active Users by Country</p>
+                          <div className="ga-list">
+                            {gaData.topCountries.length === 0 && <p style={{color:"#8899bb",fontSize:12}}>No data</p>}
+                            {gaData.topCountries.map((c,i)=>{
+                              const max = gaData.topCountries[0]?.users||1;
+                              const pct = Math.round((c.users/max)*100);
+                              return (
+                                <div key={i} className="ga-list-row">
+                                  <div className="ga-list-left">
+                                    <span className="ga-rank">{i+1}</span>
+                                    <span className="ga-name">{c.country}</span>
+                                  </div>
+                                  <div className="ga-list-right">
+                                    <div className="ga-bar-wrap"><div className="ga-bar-fill" style={{width:`${pct}%`,background:"#3b9eff"}}/></div>
+                                    <span className="ga-val">{c.users}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
                 {/* Users Table */}
                 <div className="table-wrap">
                   <table>
@@ -465,6 +610,41 @@ export default function DashboardPage() {
           .admin-stats-grid{grid-template-columns:repeat(2,1fr);}
         }
         @media(max-width:500px){.stats-grid{grid-template-columns:1fr;}.breakdown-grid{flex-direction:column;}}
+
+        /* ── Google Analytics section ── */
+        .ga-section{background:rgba(59,158,255,.03);border:1px solid rgba(59,158,255,.15);border-radius:12px;padding:16px 18px;margin-bottom:18px;}
+        .ga-section-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+        .ga-title{font-size:13px;font-weight:600;color:#e0e8ff;}
+        .ga-badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:rgba(59,158,255,.12);border:1px solid rgba(59,158,255,.25);color:#3b9eff;}
+        .live-dot-wrap{display:flex;align-items:center;gap:5px;}
+        .live-dot{width:7px;height:7px;border-radius:50%;background:#00ff99;animation:livepulse 1.5s ease infinite;}
+        @keyframes livepulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}
+        .live-label{font-size:11px;color:#00ff99;font-weight:600;}
+        .ga-refresh{font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid rgba(59,158,255,.3);background:rgba(59,158,255,.08);color:#3b9eff;cursor:pointer;transition:.2s;}
+        .ga-refresh:hover:not(:disabled){background:rgba(59,158,255,.18);}
+        .ga-refresh:disabled{opacity:.5;cursor:not-allowed;}
+        .ga-error{display:flex;align-items:center;gap:7px;background:rgba(255,107,107,.07);border:1px solid rgba(255,107,107,.2);border-radius:8px;padding:10px 13px;font-size:12px;color:#ff6b6b;margin-bottom:12px;}
+        .ga-skeleton-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+        .ga-skeleton{height:72px;border-radius:10px;background:rgba(255,255,255,.04);animation:pulse 1.4s ease infinite;}
+        .ga-stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+        .ga-stat-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:13px;display:flex;align-items:center;gap:10px;}
+        .ga-stat-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+        .ga-num{font-size:20px;font-weight:700;}
+        .ga-lbl{font-size:11px;color:#8899bb;margin-top:2px;}
+        .ga-bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        .ga-card{background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:14px;}
+        .ga-card-title{font-size:11px;font-weight:600;color:#8899bb;margin-bottom:10px;text-transform:uppercase;letter-spacing:.4px;}
+        .ga-list{display:flex;flex-direction:column;gap:8px;}
+        .ga-list-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+        .ga-list-left{display:flex;align-items:center;gap:7px;min-width:0;flex:1;}
+        .ga-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+        .ga-rank{width:16px;height:16px;border-radius:4px;background:rgba(59,158,255,.15);color:#3b9eff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+        .ga-name{font-size:12px;color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+        .ga-list-right{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+        .ga-bar-wrap{width:80px;height:5px;background:rgba(255,255,255,.07);border-radius:5px;overflow:hidden;}
+        .ga-bar-fill{height:100%;border-radius:5px;transition:width .5s ease;}
+        .ga-val{font-size:12px;font-weight:600;color:#fff;min-width:24px;text-align:right;}
+        @media(max-width:1100px){.ga-stats-grid{grid-template-columns:repeat(2,1fr);}.ga-bottom-grid{grid-template-columns:1fr;}}
       `}</style>
     </>
   );
