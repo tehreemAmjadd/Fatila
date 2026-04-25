@@ -1,5 +1,5 @@
 // app/api/leads/search/route.ts
-// Added: AI-powered query parsing + 2-Layer Result Caching (Memory + DB)
+// Fixed: User-specific results (no duplicate leads per user) + per-user cache keys
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
@@ -14,21 +14,9 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 // ─────────────────────────────────────────────────────────────────────────────
 // 🗄️  2-LAYER CACHE SYSTEM
 //
-//  Layer 1 — In-Memory Cache (Map)
-//    • Ultra-fast (0ms lookup), lives as long as the server process is running
-//    • Resets on server restart / cold start (Vercel serverless caveat below)
-//    • TTL: MEMORY_CACHE_TTL_MS (default 30 min)
-//
-//  Layer 2 — Database Cache (SearchCache table in Prisma)
-//    • Survives server restarts and works across multiple serverless instances
-//    • TTL: DB_CACHE_TTL_HOURS (default 24 h)
-//    • Falls back to full Google + OpenAI calls only when both layers miss
-//
-//  Cache Key = normalised searchQuery (lowercase, trimmed, spaces collapsed)
-//  e.g. "restaurants lahore" and "Restaurants  Lahore" → same key
-//
-//  ⚠️  Prisma model required — add this to your schema.prisma and run
-//      `npx prisma db push` or `npx prisma migrate dev`:
+//  Cache is keyed per SEARCH QUERY (not per user) so Google API calls are
+//  minimized. But results ARE filtered per-user using excludePlaceIds sent
+//  from the frontend (leads user has already seen this session).
 //
 //  model SearchCache {
 //    id          String   @id @default(cuid())
@@ -46,10 +34,9 @@ const DB_CACHE_TTL_HOURS  = 24;              // 24 hours
 interface CacheEntry {
   leads: LeadResult[];
   location: string;
-  expiresAt: number; // epoch ms
+  expiresAt: number;
 }
 
-// In-memory store — module-level singleton (shared across requests on same instance)
 const memoryCache = new Map<string, CacheEntry>();
 
 /** Normalise a query string into a stable cache key */
@@ -86,14 +73,12 @@ async function readDBCache(key: string): Promise<LeadResult[] | null> {
     });
     if (!row) return null;
     if (new Date() > new Date(row.expiresAt)) {
-      // Expired — delete asynchronously, don't await
       (db as any).searchCache.delete({ where: { cacheKey: key } }).catch(() => {});
       return null;
     }
     console.log("💾 Cache HIT (database):", key);
     return JSON.parse(row.leadsJson) as LeadResult[];
   } catch {
-    // SearchCache table may not exist yet — silently skip
     return null;
   }
 }
@@ -147,7 +132,7 @@ interface LeadResult {
   priority: string;
   aiInsight: string;
   linkedinUrl: string;
-  fromCache?: boolean; // shows in response if result came from cache
+  fromCache?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -413,7 +398,9 @@ export async function POST(req: NextRequest) {
       location,
       keyword,
       email: userEmail,
-      bypassCache = false, // pass { bypassCache: true } to force fresh results
+      bypassCache = false,
+      // ← NEW: frontend sends placeIds that this user has already seen
+      excludePlaceIds = [] as string[],
     } = await req.json();
 
     const hasInput = keyword || industry || location;
@@ -436,129 +423,140 @@ export async function POST(req: NextRequest) {
     const cacheKey = toCacheKey(searchQuery);
     const displayLocation = extractedLocation || location || "this area";
 
-    // ── Step 2: Cache lookup (skip if bypassCache flag set) ───────────────────
+    // Build a Set for fast O(1) lookup of excluded IDs
+    const excludeSet = new Set<string>(excludePlaceIds);
+
+    // ── Step 2: Cache lookup ──────────────────────────────────────────────────
+    let allLeads: LeadResult[] | null = null;
+
     if (!bypassCache) {
       // Layer 1 — memory
       const memHit = readMemoryCache(cacheKey);
       if (memHit) {
-        return NextResponse.json({
-          leads: memHit,
-          total: memHit.length,
-          fromCache: true,
-          cacheLayer: "memory",
-        });
-      }
-
-      // Layer 2 — database
-      const dbHit = await readDBCache(cacheKey);
-      if (dbHit) {
-        // Warm memory cache for next request
-        writeMemoryCache(cacheKey, dbHit, displayLocation);
-        return NextResponse.json({
-          leads: dbHit,
-          total: dbHit.length,
-          fromCache: true,
-          cacheLayer: "database",
-        });
+        allLeads = memHit;
+      } else {
+        // Layer 2 — database
+        const dbHit = await readDBCache(cacheKey);
+        if (dbHit) {
+          writeMemoryCache(cacheKey, dbHit, displayLocation);
+          allLeads = dbHit;
+        }
       }
     } else {
       console.log("🔄 Cache bypassed — fetching fresh results");
     }
 
     // ── Step 3: Cache MISS → call Google Places API ───────────────────────────
-    const places = await searchPlaces(searchQuery);
-    if (!places.length) {
-      return NextResponse.json({
-        leads: [],
-        total: 0,
-        fromCache: false,
-        message: "No results found",
-      });
-    }
-
-    // ── Step 4: Build leads with AI insights ──────────────────────────────────
-    const leads: LeadResult[] = await Promise.all(
-      places.map(async (place) => {
-        const score = scorePlace(place);
-        const priority = score >= 70 ? "High" : score >= 45 ? "Medium" : "Low";
-        const phone =
-          place.formatted_phone_number ||
-          place.international_phone_number ||
-          "";
-        const placeIndustry = inferIndustry(place.types || []);
-        const email = guessEmail(place.website || "");
-
-        const aiInsight = await generateAIInsight(
-          place,
-          placeIndustry,
-          priority,
-          score,
-          displayLocation,
-          email
-        );
-
-        return {
-          placeId: place.place_id,
-          company: place.name,
-          address: place.formatted_address || "",
-          phone,
-          email,
-          website: place.website || "",
-          industry: placeIndustry,
-          rating: place.rating || null,
-          reviewCount: place.user_ratings_total || 0,
-          score,
-          priority,
-          aiInsight,
-          linkedinUrl: `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(
-            place.name
-          )}`,
+    if (!allLeads) {
+      const places = await searchPlaces(searchQuery);
+      if (!places.length) {
+        return NextResponse.json({
+          leads: [],
+          total: 0,
           fromCache: false,
-        };
-      })
-    );
+          message: "No results found",
+        });
+      }
 
-    // ── Step 5: Write to both cache layers (fire-and-forget for DB) ───────────
-    writeMemoryCache(cacheKey, leads, displayLocation);
-    writeDBCache(cacheKey, leads, displayLocation).catch(() => {}); // non-blocking
+      // Build leads with AI insights
+      allLeads = await Promise.all(
+        places.map(async (place) => {
+          const score = scorePlace(place);
+          const priority = score >= 70 ? "High" : score >= 45 ? "Medium" : "Low";
+          const phone =
+            place.formatted_phone_number ||
+            place.international_phone_number ||
+            "";
+          const placeIndustry = inferIndustry(place.types || []);
+          const email = guessEmail(place.website || "");
 
-    // ── Step 6: Auto-save new leads to DB ─────────────────────────────────────
-    const user = userEmail
-      ? await db.user.findUnique({ where: { email: userEmail } }).catch(() => null)
-      : null;
+          const aiInsight = await generateAIInsight(
+            place,
+            placeIndustry,
+            priority,
+            score,
+            displayLocation,
+            email
+          );
 
-    if (user) {
-      for (const lead of leads) {
-        try {
-          const existing = await (db as any).lead
-            .findFirst({ where: { placeId: lead.placeId } })
-            .catch(() => null);
-          if (!existing) {
-            await (db as any).lead.create({
-              data: {
-                userId: user.id,
-                company: lead.company,
-                address: lead.address,
-                phone: lead.phone || null,
-                email: lead.email || null,
-                website: lead.website || null,
-                industry: lead.industry,
-                score: lead.score,
-                priority: lead.priority,
-                aiInsights: lead.aiInsight,
-                source: "google_maps",
-                placeId: lead.placeId,
-                linkedinUrl: lead.linkedinUrl,
-                saved: false,
-                status: "new",
-              },
-            });
-          }
-        } catch (_) {}
+          return {
+            placeId: place.place_id,
+            company: place.name,
+            address: place.formatted_address || "",
+            phone,
+            email,
+            website: place.website || "",
+            industry: placeIndustry,
+            rating: place.rating || null,
+            reviewCount: place.user_ratings_total || 0,
+            score,
+            priority,
+            aiInsight,
+            linkedinUrl: `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(
+              place.name
+            )}`,
+            fromCache: false,
+          };
+        })
+      );
+
+      // Write to both cache layers (fire-and-forget for DB)
+      writeMemoryCache(cacheKey, allLeads, displayLocation);
+      writeDBCache(cacheKey, allLeads, displayLocation).catch(() => {});
+
+      // Auto-save new leads to DB
+      const user = userEmail
+        ? await db.user.findUnique({ where: { email: userEmail } }).catch(() => null)
+        : null;
+
+      if (user) {
+        for (const lead of allLeads) {
+          try {
+            const existing = await (db as any).lead
+              .findFirst({ where: { placeId: lead.placeId } })
+              .catch(() => null);
+            if (!existing) {
+              await (db as any).lead.create({
+                data: {
+                  userId: user.id,
+                  company: lead.company,
+                  address: lead.address,
+                  phone: lead.phone || null,
+                  email: lead.email || null,
+                  website: lead.website || null,
+                  industry: lead.industry,
+                  score: lead.score,
+                  priority: lead.priority,
+                  aiInsights: lead.aiInsight,
+                  source: "google_maps",
+                  placeId: lead.placeId,
+                  linkedinUrl: lead.linkedinUrl,
+                  saved: false,
+                  status: "new",
+                },
+              });
+            }
+          } catch (_) {}
+        }
       }
     }
 
-    return NextResponse.json({ leads, total: leads.length, fromCache: false });
+    // ── Step 4: Filter out leads this user has already seen ───────────────────
+    // excludeSet frontend se aata hai (sessionStorage mein stored seen placeIds)
+    const filteredLeads = excludeSet.size > 0
+      ? allLeads.filter(lead => !excludeSet.has(lead.placeId))
+      : allLeads;
+
+    console.log(
+      `📋 Total cached leads: ${allLeads.length}, After filtering seen: ${filteredLeads.length}`
+    );
+
+    return NextResponse.json({
+      leads: filteredLeads,
+      total: filteredLeads.length,
+      fromCache: allLeads !== null,
+    });
+
   } catch (error: any) {
     console.error("Search error:", error);
     return NextResponse.json(

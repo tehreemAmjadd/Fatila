@@ -50,18 +50,79 @@ interface JobResult {
   title: string;
   company: string;
   location: string;
-  type: string;        // Full-time, Remote, etc.
+  type: string;
   postedAt: string;
   description: string;
   applyUrl: string;
-  source: string;      // LinkedIn, Indeed, etc.
+  source: string;
   salary?: string;
 }
+
+// ─── sessionStorage helpers ────────────────────────────────────────────────
+// Results tab tak persist rehte hain, tab close hone pe clear ho jate hain
+
+function saveResultsToSession(
+  results: LeadResult[],
+  keyword: string,
+  location: string,
+  industry: string
+) {
+  try {
+    sessionStorage.setItem("leadSearch_results",  JSON.stringify(results));
+    sessionStorage.setItem("leadSearch_keyword",  keyword);
+    sessionStorage.setItem("leadSearch_location", location);
+    sessionStorage.setItem("leadSearch_industry", industry);
+    sessionStorage.setItem("leadSearch_searched", "true");
+  } catch {}
+}
+
+function loadResultsFromSession(): {
+  results: LeadResult[];
+  keyword: string;
+  location: string;
+  industry: string;
+  searched: boolean;
+} {
+  try {
+    const raw = sessionStorage.getItem("leadSearch_results");
+    return {
+      results:  raw ? JSON.parse(raw) : [],
+      keyword:  sessionStorage.getItem("leadSearch_keyword")  || "",
+      location: sessionStorage.getItem("leadSearch_location") || "",
+      industry: sessionStorage.getItem("leadSearch_industry") || "",
+      searched: sessionStorage.getItem("leadSearch_searched") === "true",
+    };
+  } catch {
+    return { results: [], keyword: "", location: "", industry: "", searched: false };
+  }
+}
+
+// ─── User-specific seen leads helpers ─────────────────────────────────────
+// Jo leads user pehle dekh chuka hai unhe filter kiya jata hai
+
+function getSeenLeadIds(userEmail: string): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(`seenLeads_${userEmail}`);
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function markLeadsAsSeen(userEmail: string, placeIds: string[]) {
+  try {
+    const existing = getSeenLeadIds(userEmail);
+    placeIds.forEach(id => existing.add(id));
+    sessionStorage.setItem(`seenLeads_${userEmail}`, JSON.stringify([...existing]));
+  } catch {}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function LeadSearchPage() {
   const { user } = useUser();
 
-  // Filters
+  // Filters — restored from session on mount
   const [industry,    setIndustry]    = useState("");
   const [location,    setLocation]    = useState("");
   const [keyword,     setKeyword]     = useState("");
@@ -81,13 +142,25 @@ export default function LeadSearchPage() {
   const [jobLoading,      setJobLoading]       = useState(false);
   const [jobSearched,     setJobSearched]      = useState(false);
   const [jobError,        setJobError]         = useState("");
-  const [jobResultsUsed,  setJobResultsUsed]   = useState(0);   // cumulative across all searches
+  const [jobResultsUsed,  setJobResultsUsed]   = useState(0);
   const [jobLimitReached, setJobLimitReached]  = useState(false);
 
   // Plan
   const [dbUser,     setDbUser]     = useState<any>(null);
   const [leadsCount, setLeadsCount] = useState<number>(0);
   const email = user?.primaryEmailAddress?.emailAddress;
+
+  // ── Restore session on mount ──────────────────────────────────────────────
+  useEffect(() => {
+    const session = loadResultsFromSession();
+    if (session.searched && session.results.length > 0) {
+      setResults(session.results);
+      setKeyword(session.keyword);
+      setLocation(session.location);
+      setIndustry(session.industry);
+      setSearched(true);
+    }
+  }, []);
 
   // ── Fetch plan + real lead count ──────────────────────────────────────────
   const fetchUser = useCallback(async () => {
@@ -106,10 +179,8 @@ export default function LeadSearchPage() {
                   : Number(raw) || 0;
       setLeadsCount(count);
 
-      // Sync jobResultsUsed from DB so cumulative count survives page reloads
       const usedFromDb = Number(uData?.jobResultsUsed ?? 0);
       setJobResultsUsed(usedFromDb);
-      // jobLimitReached is re-evaluated after plan is known (see derived constants)
     } catch(e) { console.error(e); }
   }, [email]);
 
@@ -125,11 +196,6 @@ export default function LeadSearchPage() {
   const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
   // ── Job Search plan gating ────────────────────────────────────────────────
-  // free/expired  → blocked
-  // trial         → 20 total results (lifetime)
-  // starter       → 100 results / month
-  // pro           → 500 results / month
-  // business/admin→ unlimited
   const JOB_LIMITS_BY_PLAN: Record<string,number> = {
     trial:    20,
     starter:  100,
@@ -140,7 +206,6 @@ export default function LeadSearchPage() {
   const canUseJobSearch    = isAdmin || ["trial","starter","pro","business"].includes(effectivePlan) && effectivePlan !== "free" && effectivePlan !== "expired";
   const isJobSearchLimited = !isAdmin && ["trial","starter","pro"].includes(effectivePlan);
   const jobLimit           = isAdmin ? Infinity : (JOB_LIMITS_BY_PLAN[effectivePlan] ?? 0);
-  // Derive jobLimitReached from DB-synced usage + plan limit
   const derivedLimitReached = isJobSearchLimited && jobLimit !== Infinity && jobResultsUsed >= jobLimit;
 
   // ── Lead Search ───────────────────────────────────────────────────────────
@@ -153,23 +218,47 @@ export default function LeadSearchPage() {
     setLoading(true);
     setSearched(true);
     setSaveError("");
+
+    // Jo leads user pehle dekh chuka hai unki IDs collect karo
+    const seenIds = email ? [...getSeenLeadIds(email)] : [];
+
     try {
       const res = await fetch("/api/leads/search", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ industry, location, keyword, email }),
+        body:JSON.stringify({
+          industry,
+          location,
+          keyword,
+          email,
+          excludePlaceIds: seenIds, // ← server ko batao kon si leads already dekhi hain
+        }),
       });
       const data = await res.json();
-      setResults(data.leads || []);
+      const newLeads: LeadResult[] = data.leads || [];
+
+      setResults(newLeads);
+
+      // Session mein save karo taake page navigate karne pe bhi rahen
+      saveResultsToSession(newLeads, keyword, location, industry);
+
+      // Is search ki leads bhi "seen" mark karo
+      if (email && newLeads.length > 0) {
+        markLeadsAsSeen(email, newLeads.map(l => l.placeId));
+      }
+
       await fetchUser();
-    } catch(err) { console.error(err); setResults([]); }
-    finally { setLoading(false); }
+    } catch(err) {
+      console.error(err);
+      setResults([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ── Job Search ────────────────────────────────────────────────────────────
   const handleJobSearch = async () => {
     if (!canUseJobSearch || !jobPrompt.trim()) return;
-    // Block on client side if limit already reached
     if (isJobSearchLimited && (jobLimitReached || derivedLimitReached)) return;
 
     setJobLoading(true);
@@ -189,7 +278,6 @@ export default function LeadSearchPage() {
 
       const data = await res.json();
 
-      // 403 = already at limit BEFORE this search — no jobs returned
       if (res.status === 403) {
         setJobLimitReached(true);
         setJobResultsUsed(data.jobResultsUsed ?? TRIAL_JOB_LIMIT);
@@ -200,11 +288,9 @@ export default function LeadSearchPage() {
       if (data.error) {
         setJobError(data.error);
       } else {
-        // Always show jobs first, even if limit was hit during this search
         setJobResults(data.jobs || []);
         if (isJobSearchLimited) {
           setJobResultsUsed(data.jobResultsUsed ?? 0);
-          // Lock AFTER results are set so user can still see them
           setJobLimitReached(data.limitReached ?? false);
         }
       }
@@ -380,7 +466,7 @@ export default function LeadSearchPage() {
             ) : results.length === 0 ? (
               <div className="no-results">
                 <Search size={32} color="#8899bb" strokeWidth={1.4}/>
-                <p>No results found. Try a different location or keyword.</p>
+                <p>No new results found for this search. All matching leads have already been shown to you. Try a different keyword or location.</p>
               </div>
             ) : (
               <div className="results-grid">
@@ -558,7 +644,7 @@ export default function LeadSearchPage() {
                 </>
               )}
 
-              {/* Job results — always visible regardless of limit state */}
+              {/* Job results */}
               {jobSearched && (
                 <div className="job-results-section">
                   <div className="results-hdr" style={{marginBottom:"14px"}}>
@@ -618,7 +704,6 @@ export default function LeadSearchPage() {
                         ))}
                       </div>
 
-                      {/* Upgrade nudge shown after results */}
                       {isJobSearchLimited && (
                         <div className="job-upgrade-nudge">
                           <Lock size={13} color="#a78bfa"/>
@@ -638,7 +723,6 @@ export default function LeadSearchPage() {
             </>
           )}
         </div>
-        {/* ══════════════════════════════════════════════════════════════════ */}
 
       </div>
 
@@ -717,7 +801,7 @@ export default function LeadSearchPage() {
         .skeleton-card{height:240px;border-radius:14px;background:rgba(255,255,255,.04);animation:pulse 1.4s ease infinite;}
         @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.8}}
 
-        .no-results{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px;color:#8899bb;font-size:14px;}
+        .no-results{display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px;color:#8899bb;font-size:14px;text-align:center;}
 
         .results-grid{
           display:grid;
@@ -810,10 +894,7 @@ export default function LeadSearchPage() {
           background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.25);color:#a78bfa;
         }
 
-        /* Job gate (free plan blocked) */
-        .job-gate-box{
-          text-align:center;padding:50px 20px;max-width:420px;margin:8px auto;
-        }
+        .job-gate-box{text-align:center;padding:50px 20px;max-width:420px;margin:8px auto;}
         .job-gate-icon{
           width:56px;height:56px;border-radius:50%;
           background:rgba(136,153,187,.1);border:1px solid rgba(136,153,187,.15);
@@ -822,7 +903,6 @@ export default function LeadSearchPage() {
         .job-gate-box h3{font-size:18px;font-weight:600;margin-bottom:10px;}
         .job-gate-box p{color:#8899bb;font-size:13px;line-height:1.6;margin-bottom:20px;}
 
-        /* Trial banner */
         .job-trial-banner{
           display:flex;align-items:center;gap:8px;
           background:rgba(255,215,0,.07);border:1px solid rgba(255,215,0,.18);
@@ -835,7 +915,6 @@ export default function LeadSearchPage() {
         .job-usage-track{flex:1;min-width:60px;height:4px;background:rgba(255,255,255,.1);border-radius:4px;overflow:hidden;}
         .job-usage-fill{height:100%;border-radius:4px;transition:width .4s ease;}
 
-        /* Inline limit banner (replaces search bar when trial exhausted) */
         .job-limit-banner{
           display:flex;align-items:center;gap:8px;
           background:rgba(255,107,107,.08);border:1px solid rgba(255,107,107,.2);
@@ -845,7 +924,6 @@ export default function LeadSearchPage() {
         .job-limit-banner strong{color:#fff;}
         .job-limit-banner a{margin-left:auto;white-space:nowrap;}
 
-        /* Upgrade nudge after results */
         .job-upgrade-nudge{
           display:flex;align-items:center;gap:8px;
           background:rgba(167,139,250,.07);border:1px solid rgba(167,139,250,.18);
@@ -856,7 +934,6 @@ export default function LeadSearchPage() {
         .job-upgrade-link{margin-left:auto;color:#a78bfa;font-weight:700;font-size:12px;white-space:nowrap;text-decoration:none;}
         .job-upgrade-link:hover{text-decoration:underline;}
 
-        /* Job search bar */
         .job-search-bar{display:flex;gap:10px;align-items:center;}
         .job-input-wrap{
           flex:1;position:relative;display:flex;align-items:center;
@@ -881,7 +958,6 @@ export default function LeadSearchPage() {
         .job-search-btn:hover:not(:disabled){background:#2280e0;}
         .job-search-btn:disabled{opacity:.6;cursor:not-allowed;}
 
-        /* Job results */
         .job-results-section{margin-top:20px;}
         .job-skeleton-list{display:flex;flex-direction:column;gap:10px;}
         .job-skeleton-card{height:90px;border-radius:12px;background:rgba(255,255,255,.04);animation:pulse 1.4s ease infinite;}
