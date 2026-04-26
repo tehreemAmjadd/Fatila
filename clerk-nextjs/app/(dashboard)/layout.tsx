@@ -177,7 +177,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 <span>Admin</span>
               </div>
               <Link
-                href="/dashboard/feedback"
+                href="/feedback"
                 className={pathname === "/dashboard/feedback" ? "active admin-link" : "admin-link"}
               >
                 <MessageSquare size={15} strokeWidth={1.8} />
