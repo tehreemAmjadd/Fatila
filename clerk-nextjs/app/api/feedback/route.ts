@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Rating must be between 1 and 5." }, { status: 400 });
     }
 
-    const feedback = await prisma.feedback.create({
+    const feedback = await prisma.Feedback.create({
       data: { name, email, rating: Number(rating), category, message },
     });
 
