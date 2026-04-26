@@ -44,6 +44,8 @@ export default function DashboardPage() {
   const [gaData,    setGaData]    = useState<GAData | null>(null);
   const [gaLoading, setGaLoading] = useState(false);
   const [gaError,   setGaError]   = useState("");
+  const [userPage,  setUserPage]  = useState(1);
+  const USERS_PER_PAGE = 10;
 
   const email = user?.primaryEmailAddress?.emailAddress;
 
@@ -106,6 +108,14 @@ export default function DashboardPage() {
     const id = setInterval(() => fetchStats(email), 20_000);
     return () => clearInterval(id);
   }, [email]);
+
+  // Fetch GA when admin confirmed, refresh every 30s
+  useEffect(() => {
+    if (!dbUser || dbUser.role !== "admin") return;
+    fetchGA();
+    const id = setInterval(fetchGA, 30_000);
+    return () => clearInterval(id);
+  }, [dbUser]);
 
   // Fetch GA when admin confirmed, refresh every 30s for real-time active users
   useEffect(() => {
@@ -293,6 +303,115 @@ export default function DashboardPage() {
                   <Shield size={15} color="#ffd700"/><h3>Admin — Platform Overview</h3>
                 </div>
 
+                {/* ── WEBSITE ANALYTICS ── */}
+                <div className="ga-section">
+                  <div className="ga-section-hdr">
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <BarChart2 size={15} color="#3b9eff"/>
+                      <span className="ga-title">Website Analytics</span>
+                      <span className="ga-badge">Last 7 days</span>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span className="live-dot-wrap">
+                        <span className="live-dot"/>
+                        <span className="live-label">Live</span>
+                      </span>
+                      <button className="ga-refresh" onClick={fetchGA} disabled={gaLoading}>
+                        {gaLoading ? "Loading…" : "↻ Refresh"}
+                      </button>
+                    </div>
+                  </div>
+                  {gaError && (
+                    <div className="ga-error">
+                      <AlertTriangle size={13} color="#ff6b6b"/>
+                      <span>{gaError}</span>
+                    </div>
+                  )}
+                  {gaLoading && !gaData && (
+                    <div className="ga-skeleton-row">
+                      {[1,2,3,4].map(i=><div key={i} className="ga-skeleton"/>)}
+                    </div>
+                  )}
+                  {gaData && (
+                    <div>
+                      <div className="ga-stats-grid">
+                        <div className="ga-stat-card">
+                          <div className="ga-stat-icon" style={{background:"rgba(0,255,153,.1)",border:"1px solid rgba(0,255,153,.2)"}}>
+                            <Users size={16} color="#00ff99"/>
+                          </div>
+                          <div><h4 className="ga-num">{gaData.totalUsers.toLocaleString()}</h4><p className="ga-lbl">Total Users</p></div>
+                        </div>
+                        <div className="ga-stat-card">
+                          <div className="ga-stat-icon" style={{background:"rgba(59,158,255,.1)",border:"1px solid rgba(59,158,255,.2)"}}>
+                            <MousePointer size={16} color="#3b9eff"/>
+                          </div>
+                          <div><h4 className="ga-num">{gaData.newUsers.toLocaleString()}</h4><p className="ga-lbl">New Users</p></div>
+                        </div>
+                        <div className="ga-stat-card">
+                          <div className="ga-stat-icon" style={{background:"rgba(255,215,0,.1)",border:"1px solid rgba(255,215,0,.2)"}}>
+                            <Globe size={16} color="#ffd700"/>
+                          </div>
+                          <div><h4 className="ga-num">{gaData.sessions.toLocaleString()}</h4><p className="ga-lbl">Sessions</p></div>
+                        </div>
+                        <div className="ga-stat-card" style={{border:"1px solid rgba(0,255,153,.25)",background:"rgba(0,255,153,.05)"}}>
+                          <div className="ga-stat-icon" style={{background:"rgba(0,255,153,.15)",border:"1px solid rgba(0,255,153,.3)"}}>
+                            <Activity size={16} color="#00ff99"/>
+                          </div>
+                          <div><h4 className="ga-num" style={{color:"#00ff99"}}>{gaData.activeUsers}</h4><p className="ga-lbl">Active Right Now</p></div>
+                        </div>
+                      </div>
+                      <div className="ga-bottom-grid">
+                        <div className="ga-card">
+                          <p className="ga-card-title">Traffic Sources</p>
+                          <div className="ga-list">
+                            {gaData.trafficSources.map((s,i)=>(
+                              <div key={i} className="ga-list-row">
+                                <div className="ga-list-left">
+                                  <span className="ga-dot" style={{background:["#3b9eff","#00ff99","#a78bfa","#ffd700","#ff6b6b","#8899bb"][i%6]}}/>
+                                  <span className="ga-name">{s.source}</span>
+                                </div>
+                                <div className="ga-list-right">
+                                  <div className="ga-bar-wrap">
+                                    <div className="ga-bar-fill" style={{
+                                      width: gaData.trafficSources.reduce((a,b)=>a+b.sessions,0) > 0
+                                        ? Math.round(s.sessions/gaData.trafficSources.reduce((a,b)=>a+b.sessions,0)*100)+"%"
+                                        : "0%",
+                                      background:["#3b9eff","#00ff99","#a78bfa","#ffd700","#ff6b6b","#8899bb"][i%6]
+                                    }}/>
+                                  </div>
+                                  <span className="ga-val">{s.sessions}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="ga-card">
+                          <p className="ga-card-title">Active Users by Country</p>
+                          <div className="ga-list">
+                            {gaData.topCountries.map((c,i)=>(
+                              <div key={i} className="ga-list-row">
+                                <div className="ga-list-left">
+                                  <span className="ga-rank">{i+1}</span>
+                                  <span className="ga-name">{c.country}</span>
+                                </div>
+                                <div className="ga-list-right">
+                                  <div className="ga-bar-wrap">
+                                    <div className="ga-bar-fill" style={{
+                                      width: Math.round(c.users/(gaData.topCountries[0]?.users||1)*100)+"%",
+                                      background:"#3b9eff"
+                                    }}/>
+                                  </div>
+                                  <span className="ga-val">{c.users}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Platform Stats Row */}
                 <div className="admin-stats-grid">
                   <div className="admin-stat-card">
@@ -468,7 +587,7 @@ export default function DashboardPage() {
                     <tbody>
                       {adminUsers.length===0
                         ?<tr><td colSpan={7} className="td-empty">No users found</td></tr>
-                        :adminUsers.map((u:any)=>(
+                        :adminUsers.slice((userPage-1)*USERS_PER_PAGE, userPage*USERS_PER_PAGE).map((u:any)=>(
                           <tr key={u.id}>
                             <td className="td-email">{u.email}</td>
                             <td><span style={{color:u.plan==="business"?"#a78bfa":u.plan==="pro"?"#3b9eff":u.plan==="starter"?"#00ff99":"#8899bb",fontSize:12,fontWeight:700}}>{u.plan||"free"}</span></td>
@@ -483,6 +602,23 @@ export default function DashboardPage() {
                     </tbody>
                   </table>
                 </div>
+                {adminUsers.length > USERS_PER_PAGE && (
+                  <div className="pg-wrap">
+                    <button
+                      className="pg-btn"
+                      onClick={()=>setUserPage(p=>Math.max(1,p-1))}
+                      disabled={userPage===1}
+                    >&#8249; Prev</button>
+                    <span className="pg-info">
+                      {(userPage-1)*USERS_PER_PAGE+1}&#8211;{Math.min(userPage*USERS_PER_PAGE,adminUsers.length)} of {adminUsers.length}
+                    </span>
+                    <button
+                      className="pg-btn"
+                      onClick={()=>setUserPage(p=>Math.min(Math.ceil(adminUsers.length/USERS_PER_PAGE),p+1))}
+                      disabled={userPage===Math.ceil(adminUsers.length/USERS_PER_PAGE)}
+                    >Next &#8250;</button>
+                  </div>
+                )}
               </div>
             )}
           </>
