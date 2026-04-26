@@ -201,8 +201,7 @@ export default function AdminFeedbackPage() {
       )}
 
       <style jsx>{`
-        .main { padding: 28px 24px; min-height: 100vh; }
-
+.main { padding: 28px 24px; min-height: 100vh; margin-left: 240px; }
         .page-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
         .page-title { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; color: white; margin-bottom: 4px; }
         .page-sub { color: #8899bb; font-size: 13px; }
@@ -252,6 +251,9 @@ export default function AdminFeedbackPage() {
           .stat-card { min-width: 80px; padding: 12px; }
           .feedback-grid { grid-template-columns: 1fr; }
         }
+          @media (max-width: 900px) {
+  .main { margin-left: 0; padding: 16px 12px; }
+}
       `}</style>
     </div>
   );
