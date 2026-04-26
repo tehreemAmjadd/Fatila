@@ -33,7 +33,9 @@ interface LeadResult {
   company: string;
   address: string;
   phone: string;
+  phones: string[];       // all phone numbers
   email: string | null;
+  emails: string[];       // all emails from website scraping
   website: string;
   industry: string;
   rating: number | null;
@@ -517,18 +519,29 @@ export default function LeadSearchPage() {
                             <span>{lead.address.split(",").slice(-2).join(",").trim()}</span>
                           </div>
                         )}
-                        {lead.phone && (
-                          <div className="contact-row">
-                            <Phone size={13} color="#8899bb" strokeWidth={1.8}/>
-                            <a href={`tel:${lead.phone}`}>{lead.phone}</a>
+
+                        {/* All phone numbers */}
+                        {(lead.phones?.length > 0 ? lead.phones : lead.phone ? [lead.phone] : []).map((ph, idx) => (
+                          <div className="contact-row" key={`ph-${idx}`}>
+                            <Phone size={13} color={idx === 0 ? "#8899bb" : "#556677"} strokeWidth={1.8}/>
+                            <a href={`tel:${ph}`}>{ph}</a>
+                            {idx > 0 && <span style={{fontSize:"10px",color:"#556677",marginLeft:"4px"}}>(alt)</span>}
                           </div>
-                        )}
-                        {lead.email && (
-                          <div className="contact-row">
-                            <Mail size={13} color="#8899bb" strokeWidth={1.8}/>
-                            <a href={`mailto:${lead.email}`}>{lead.email}</a>
+                        ))}
+
+                        {/* All emails from website scraping */}
+                        {(lead.emails?.length > 0 ? lead.emails : lead.email ? [lead.email] : []).map((em, idx) => (
+                          <div className="contact-row" key={`em-${idx}`}>
+                            <Mail size={13} color={idx === 0 ? "#00ff99" : "#556677"} strokeWidth={1.8}/>
+                            <a href={`mailto:${em}`} style={{color: idx === 0 ? "#00ff99" : "#8899bb"}}>{em}</a>
+                            {idx === 0 && lead.emails?.length > 1 && (
+                              <span style={{fontSize:"10px",color:"#00ff99",marginLeft:"4px",background:"rgba(0,255,153,.1)",padding:"1px 5px",borderRadius:"8px"}}>
+                                +{lead.emails.length - 1} more
+                              </span>
+                            )}
                           </div>
-                        )}
+                        ))}
+
                         {lead.website && (
                           <div className="contact-row">
                             <Globe size={13} color="#8899bb" strokeWidth={1.8}/>
