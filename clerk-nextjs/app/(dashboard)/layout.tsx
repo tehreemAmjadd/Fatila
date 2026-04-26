@@ -7,7 +7,7 @@ import Link from "next/link";
 import {
   LayoutDashboard, Bot, Search, Bookmark,
   Mail, Phone, CheckSquare, Upload, CreditCard, Megaphone,
-  Menu, X, Home, LogOut,
+  Menu, X, Home, LogOut, MessageSquare,
 } from "lucide-react";
 
 const NAV = [
@@ -118,6 +118,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const effectivePlan = dbUser?.effectivePlan || "free";
   const planCfg = PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free;
+  const isAdmin = dbUser?.role === "admin";
 
   return (
     <>
@@ -125,7 +126,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="fixed inset-0 bg-gradient-to-br from-[#020817] via-[#04102b] to-[#02060f] z-[-20]" />
       <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", zIndex:-10, pointerEvents:"none" }} />
 
-      {/* Mobile top navbar — only visible on small screens */}
+      {/* Mobile top navbar */}
       <div className="mobile-topbar">
         <button
           className="hamburger-btn"
@@ -139,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {/* Overlay — tap to close sidebar */}
+      {/* Overlay */}
       {sidebarActive && (
         <div className="sidebar-overlay" onClick={() => setSidebarActive(false)} />
       )}
@@ -147,7 +148,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       {/* Sidebar */}
       <div id="sidebar" className={`sidebar ${sidebarActive ? "active" : ""}`}>
 
-        {/* ── Sidebar header: logo + close btn (always visible) ── */}
         <div className="sb-header">
           <div className="sb-logo">
             <div className="logo-dot" />
@@ -158,7 +158,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
         </div>
 
-        {/* ── Back to Homepage link ── */}
         <Link href="/" className="sb-home-link">
           <Home size={13} strokeWidth={2} />
           Back to Homepage
@@ -170,6 +169,22 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <Icon size={15} strokeWidth={1.8} />{label}
             </Link>
           ))}
+
+          {/* Admin only — Feedback */}
+          {isAdmin && (
+            <>
+              <div className="nav-divider">
+                <span>Admin</span>
+              </div>
+              <Link
+                href="/dashboard/feedback"
+                className={pathname === "/dashboard/feedback" ? "active admin-link" : "admin-link"}
+              >
+                <MessageSquare size={15} strokeWidth={1.8} />
+                User Feedback
+              </Link>
+            </>
+          )}
         </nav>
 
         <div className="sb-footer">
@@ -177,7 +192,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link href="/billing" className="sb-upgrade">Upgrade</Link>
         </div>
 
-        {/* ── Logout button ── */}
         <button className="sb-logout-btn" onClick={handleLogout}>
           <LogOut size={14} strokeWidth={1.8} />
           Logout
@@ -187,7 +201,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       {/* Page content */}
       <div className="page-wrapper">
-        {/* Mobile topbar spacer — only takes space on mobile */}
         <div className="topbar-spacer" />
         {children}
       </div>
@@ -196,12 +209,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif;}
         body{color:white;overflow-x:hidden;}
 
-        /* ── Mobile topbar — hidden on desktop ── */
         .mobile-topbar{display:none;}
-        /* Spacer hidden on desktop (sidebar handles layout) */
         .topbar-spacer{display:none;}
 
-        /* ── Sidebar ── */
         .sidebar{
           position:fixed;left:0;top:0;
           width:240px;height:100%;
@@ -213,16 +223,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           display:flex;flex-direction:column;
         }
 
-        /* Sidebar header row (logo + close btn) */
         .sb-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
         .sb-logo{display:flex;align-items:center;gap:9px;padding:0 4px;color:#00ff99;font-size:17px;font-weight:700;}
         .logo-dot{width:8px;height:8px;border-radius:50%;background:#00ff99;box-shadow:0 0 8px #00ff99;flex-shrink:0;}
 
-        /* Close btn — desktop mein hidden, mobile mein visible */
         .sb-close-btn{display:none;background:none;border:none;color:#8899bb;cursor:pointer;padding:4px;border-radius:6px;transition:.2s;flex-shrink:0;}
         .sb-close-btn:hover{color:white;background:rgba(255,255,255,.08);}
 
-        /* Back to Homepage link */
         .sb-home-link{
           display:flex;align-items:center;gap:6px;
           color:#8899bb;font-size:11px;text-decoration:none;
@@ -234,14 +241,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
         .sb-home-link:hover{color:#00ff99;border-color:rgba(0,255,153,.2);background:rgba(0,255,153,.05);}
 
-        nav{display:flex;flex-direction:column;gap:2px;flex:1;}
+        nav{display:flex;flex-direction:column;gap:2px;flex:1;overflow-y:auto;}
         nav a{display:flex;align-items:center;gap:9px;color:#8899bb;text-decoration:none;font-size:13px;padding:9px 10px;border-radius:8px;transition:.2s;}
         nav a:hover,nav a.active{color:#00ff99;background:rgba(0,255,153,.08);}
+
+        /* Admin nav divider */
+        .nav-divider{
+          display:flex;align-items:center;gap:8px;
+          margin:10px 4px 4px;
+          color:#8899bb;font-size:10px;font-weight:600;
+          letter-spacing:.08em;text-transform:uppercase;
+        }
+        .nav-divider::before,.nav-divider::after{
+          content:'';flex:1;height:1px;
+          background:rgba(255,255,255,.06);
+        }
+
+        /* Admin link special style */
+        .admin-link{color:#ffd700 !important;}
+        .admin-link:hover,.admin-link.active{color:#ffd700 !important;background:rgba(255,215,0,.07) !important;}
+
         .sb-footer{margin-top:auto;padding-top:16px;border-top:1px solid rgba(255,255,255,.06);display:flex;align-items:center;justify-content:space-between;}
         .sb-upgrade{font-size:11px;color:#00ff99;text-decoration:none;background:rgba(0,255,153,.1);padding:4px 10px;border-radius:20px;border:1px solid rgba(0,255,153,.2);}
         .sb-upgrade:hover{background:rgba(0,255,153,.2);}
 
-        /* Logout button */
         .sb-logout-btn{
           display:flex;align-items:center;gap:8px;
           width:100%;margin-top:10px;
@@ -252,7 +275,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
         .sb-logout-btn:hover{background:rgba(255,107,107,.1);color:#ff8f8f;}
 
-        /* ── Overlay ── */
         .sidebar-overlay{
           position:fixed;inset:0;
           background:rgba(0,0,0,.6);
@@ -260,14 +282,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           backdrop-filter:blur(2px);
         }
 
-        /* ── Page wrapper ── */
         .page-wrapper{min-height:100vh;position:relative;z-index:1;}
         .main{padding:20px;min-height:100vh;}
 
-        /* ── Mobile ── */
         @media(max-width:900px){
           .topbar-spacer{display:block;}
-          /* Top navbar bar */
           .mobile-topbar{
             display:flex;
             align-items:center;
@@ -293,19 +312,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           .mobile-logo{display:flex;align-items:center;gap:7px;color:#00ff99;font-size:15px;font-weight:700;}
           .logo-dot-sm{width:7px;height:7px;border-radius:50%;background:#00ff99;box-shadow:0 0 6px #00ff99;}
 
-          /* Sidebar */
           .sidebar{
             left:-260px;top:0;z-index:1000;
             overflow-y:auto;
           }
           .sidebar.active{left:0;box-shadow:6px 0 28px rgba(0,0,0,.6);}
-          /* Show close btn on mobile */
           .sb-close-btn{display:flex;}
 
-          /* Content */
           .page-wrapper{margin-left:0;width:100%;}
           .main{padding:16px 14px;margin-left:0;}
-          /* Spacer pushes content below the 52px fixed topbar */
           .topbar-spacer{height:52px;flex-shrink:0;}
         }
 
