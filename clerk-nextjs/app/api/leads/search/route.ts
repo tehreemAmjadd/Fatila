@@ -1,8 +1,10 @@
 // app/api/leads/search/route.ts
 //
-// APPROACH: Run 3 parallel Google queries per search to get ~60 results.
-// Website scraping: fetch each company's website and extract ALL real emails/phones.
-// OpenAI is used to parse scraped content for contact info.
+// STRATEGY:
+// 1. Google Places se fast leads return karo (no scraping delay)
+// 2. Background mein websites scrape karo aur cache update karo
+// 3. Scraping timeout: 3s per page, sirf homepage + /contact parallel
+// 4. User ko results milte hain ~5-10 seconds mein
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -15,11 +17,12 @@ const GOOGLE_API_KEY =
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 
-const MEMORY_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+const MEMORY_CACHE_TTL_MS = 2 * 60 * 60 * 1000;
 const DB_CACHE_TTL_HOURS  = 48;
 const RESULTS_PER_PAGE    = 20;
+const SCRAPE_TIMEOUT_MS   = 3000;
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 interface PlaceResult {
   place_id: string;
@@ -39,9 +42,9 @@ interface LeadResult {
   company: string;
   address: string;
   phone: string;
-  phones: string[];        // ← ALL phone numbers found
+  phones: string[];
   email: string | null;
-  emails: string[];        // ← ALL emails found
+  emails: string[];
   website: string;
   industry: string;
   rating: number | null;
@@ -58,23 +61,18 @@ interface LeadResult {
 interface MemEntry { leads: LeadResult[]; expiresAt: number }
 const mem = new Map<string, MemEntry>();
 
-function toCacheKey(q: string) {
-  return q.toLowerCase().trim().replace(/\s+/g, " ");
-}
-
+function toCacheKey(q: string) { return q.toLowerCase().trim().replace(/\s+/g, " "); }
 function memRead(key: string): LeadResult[] | null {
   const e = mem.get(key);
   if (!e) return null;
   if (Date.now() > e.expiresAt) { mem.delete(key); return null; }
-  console.log(`MEM HIT: "${key}" (${e.leads.length} leads)`);
   return e.leads;
 }
-
 function memWrite(key: string, leads: LeadResult[]) {
   mem.set(key, { leads, expiresAt: Date.now() + MEMORY_CACHE_TTL_MS });
 }
 
-// ─── DB cache ─────────────────────────────────────────────────────────────────
+// ─── DB cache ────────────────────────────────────────────────────────────────
 
 async function dbRead(key: string): Promise<LeadResult[] | null> {
   try {
@@ -84,10 +82,8 @@ async function dbRead(key: string): Promise<LeadResult[] | null> {
       (db as any).searchCache.delete({ where: { cacheKey: key } }).catch(() => {});
       return null;
     }
-    const leads = JSON.parse(row.leadsJson) as LeadResult[];
-    console.log(`DB HIT: "${key}" (${leads.length} leads)`);
-    return leads;
-  } catch (e) { console.error("DB read:", e); return null; }
+    return JSON.parse(row.leadsJson) as LeadResult[];
+  } catch { return null; }
 }
 
 async function dbWrite(key: string, leads: LeadResult[], location: string) {
@@ -98,7 +94,6 @@ async function dbWrite(key: string, leads: LeadResult[], location: string) {
       update: { leadsJson: JSON.stringify(leads), location, expiresAt },
       create: { cacheKey: key, leadsJson: JSON.stringify(leads), location, expiresAt },
     });
-    console.log(`DB WRITE: ${leads.length} leads`);
   } catch (e) { console.error("DB write:", e); }
 }
 
@@ -121,19 +116,15 @@ async function fetchOnePage(query: string): Promise<string[]> {
     const url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
     const res  = await fetch(url, { cache: "no-store" });
     const data = await res.json();
-    console.log(`Query "${query}": status=${data.status} results=${data.results?.length ?? 0}`);
+    console.log(`"${query}": ${data.status} - ${data.results?.length ?? 0} results`);
     if (data.status !== "OK" || !data.results?.length) return [];
     return data.results.map((r: any) => r.place_id).filter(Boolean);
-  } catch (e) {
-    console.error(`fetchOnePage error for "${query}":`, e);
-    return [];
-  }
+  } catch (e) { console.error("fetchOnePage:", e); return []; }
 }
 
 function generateQueryVariations(keyword: string, location: string): string[] {
-  const kw = keyword.toLowerCase().trim();
+  const kw  = keyword.toLowerCase().trim();
   const loc = location.trim();
-
   const synonyms: Record<string, string[]> = {
     "software companies":  ["software houses", "software firms", "IT companies"],
     "software company":    ["software house", "software firm", "IT company"],
@@ -162,181 +153,31 @@ function generateQueryVariations(keyword: string, location: string): string[] {
     "pharmacy":            ["chemist", "drugstore", "medical store"],
     "pharmacies":          ["chemists", "drugstores", "medical stores"],
   };
-
   let variations: string[] = [];
   for (const [key, syns] of Object.entries(synonyms)) {
-    if (kw.includes(key)) {
-      variations = syns.map(s => kw.replace(key, s));
-      break;
-    }
+    if (kw.includes(key)) { variations = syns.map(s => kw.replace(key, s)); break; }
   }
-
-  if (!variations.length) {
-    variations = [`${kw} company`, `best ${kw}`];
-  }
-
-  const queries = [
-    `${kw} ${loc}`,
-    `${variations[0]} ${loc}`,
-    `${variations[1] || variations[0]} ${loc}`,
-  ];
-
-  return [...new Set(queries)];
+  if (!variations.length) variations = [`${kw} company`, `best ${kw}`];
+  return [...new Set([`${kw} ${loc}`, `${variations[0]} ${loc}`, `${variations[1] || variations[0]} ${loc}`])];
 }
 
 async function fetchAllPlaceIds(keyword: string, location: string): Promise<string[]> {
   const queries = generateQueryVariations(keyword, location);
-  console.log("Running parallel queries:", queries);
-
+  console.log("Queries:", queries);
   const results = await Promise.all(queries.map(q => fetchOnePage(q)));
-
   const seen = new Set<string>();
   const allIds: string[] = [];
   for (const ids of results) {
     for (const id of ids) {
-      if (!seen.has(id)) {
-        seen.add(id);
-        allIds.push(id);
-      }
+      if (!seen.has(id)) { seen.add(id); allIds.push(id); }
     }
   }
-
-  console.log(`Total unique place IDs from ${queries.length} queries: ${allIds.length}`);
+  console.log(`Unique IDs: ${allIds.length}`);
   return allIds;
-}
-
-// ─── Website Scraping for Real Contact Info ───────────────────────────────────
-
-/**
- * Scrape a website's homepage (and /contact page if available) to extract
- * all real emails and phone numbers using regex + OpenAI.
- */
-async function scrapeContactInfo(websiteUrl: string): Promise<{ emails: string[]; phones: string[] }> {
-  if (!websiteUrl) return { emails: [], phones: [] };
-
-  const pagesToTry = [
-    websiteUrl.replace(/\/$/, ""),
-    websiteUrl.replace(/\/$/, "") + "/contact",
-    websiteUrl.replace(/\/$/, "") + "/contact-us",
-    websiteUrl.replace(/\/$/, "") + "/about",
-  ];
-
-  let combinedText = "";
-
-  for (const pageUrl of pagesToTry) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout per page
-      const res = await fetch(pageUrl, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (compatible; LeadBot/1.0)",
-          "Accept": "text/html",
-        },
-        cache: "no-store",
-      });
-      clearTimeout(timeout);
-
-      if (!res.ok) continue;
-
-      const html = await res.text();
-      // Strip HTML tags to get plain text
-      const text = html
-        .replace(/<script[\s\S]*?<\/script>/gi, "")
-        .replace(/<style[\s\S]*?<\/style>/gi, "")
-        .replace(/<[^>]+>/g, " ")
-        .replace(/\s+/g, " ")
-        .slice(0, 8000); // Limit to 8k chars
-
-      combinedText += " " + text;
-      if (combinedText.length > 15000) break; // Don't process too much
-    } catch {
-      // Page timed out or failed, try next
-    }
-  }
-
-  if (!combinedText.trim()) return { emails: [], phones: [] };
-
-  // ── Step 1: Regex extraction ──────────────────────────────────────────────
-  const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
-  const phoneRegex = /(?:\+?\d[\d\s\-().]{7,}\d)/g;
-
-  const regexEmails = [...new Set(combinedText.match(emailRegex) || [])].filter(e => {
-    // Filter out obviously bad emails (image files, etc.)
-    return !e.match(/\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i) && e.length < 80;
-  });
-
-  const regexPhones = [...new Set(
-    (combinedText.match(phoneRegex) || [])
-      .map(p => p.trim())
-      .filter(p => p.replace(/\D/g, "").length >= 7)
-  )].slice(0, 10);
-
-  // ── Step 2: If OpenAI available, use it to find even more ─────────────────
-  if (OPENAI_API_KEY && combinedText.length > 100) {
-    try {
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          max_tokens: 300,
-          temperature: 0,
-          messages: [
-            {
-              role: "system",
-              content: `You are a contact info extractor. Extract ALL email addresses and phone numbers from the text.
-Return ONLY valid JSON: {"emails": ["email1", "email2"], "phones": ["phone1", "phone2"]}
-- Include ALL emails found (info@, sales@, hr@, contact@, support@, etc.)
-- Include ALL phone numbers in their original format
-- Do NOT include image/file paths as emails
-- Return empty arrays if none found`,
-            },
-            {
-              role: "user",
-              content: combinedText.slice(0, 6000),
-            },
-          ],
-        }),
-      });
-
-      const data = await res.json();
-      const content = data.choices?.[0]?.message?.content?.trim() || "";
-
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const aiEmails: string[] = (parsed.emails || []).filter(
-          (e: string) => typeof e === "string" && e.includes("@")
-        );
-        const aiPhones: string[] = (parsed.phones || []).filter(
-          (p: string) => typeof p === "string" && p.length >= 7
-        );
-
-        // Merge regex + AI results, deduplicate
-        const allEmails = [...new Set([...regexEmails, ...aiEmails])];
-        const allPhones = [...new Set([...regexPhones, ...aiPhones])];
-
-        console.log(`Scraped ${websiteUrl}: ${allEmails.length} emails, ${allPhones.length} phones`);
-        return { emails: allEmails.slice(0, 10), phones: allPhones.slice(0, 5) };
-      }
-    } catch (e) {
-      console.error("OpenAI scrape parse error:", e);
-    }
-  }
-
-  // Fallback: return regex results only
-  return { emails: regexEmails.slice(0, 10), phones: regexPhones.slice(0, 5) };
 }
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-/**
- * Fallback: guess info@ email from domain if scraping fails
- */
 function guessEmail(website: string): string | null {
   if (!website) return null;
   try { return "info@" + website.replace(/https?:\/\//, "").split("/")[0].replace(/^www\./, ""); }
@@ -371,17 +212,100 @@ function scorePlace(p: PlaceResult): number {
   return Math.min(s, 100);
 }
 
+// ─── Fetch one page with timeout ──────────────────────────────────────────────
+
+async function fetchPageText(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadBot/1.0)", "Accept": "text/html" },
+      cache: "no-store",
+    });
+    clearTimeout(timer);
+    if (!res.ok) return "";
+    const html = await res.text();
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .slice(0, 5000);
+  } catch { return ""; }
+}
+
+// ─── Scrape one website ───────────────────────────────────────────────────────
+
+async function scrapeContactInfo(websiteUrl: string): Promise<{ emails: string[]; phones: string[] }> {
+  if (!websiteUrl) return { emails: [], phones: [] };
+  const base = websiteUrl.replace(/\/$/, "");
+
+  // homepage + /contact in parallel
+  const [homeText, contactText] = await Promise.all([
+    fetchPageText(base),
+    fetchPageText(`${base}/contact`),
+  ]);
+  const text = (homeText + " " + contactText).trim();
+  if (!text) return { emails: [], phones: [] };
+
+  // Regex — fast, no API cost
+  const emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+  const phoneRegex = /(?:\+?\d[\d\s\-().]{6,}\d)/g;
+
+  const emails = [...new Set((text.match(emailRegex) || []).filter(
+    e => !e.match(/\.(png|jpg|jpeg|gif|svg|webp|css|js)$/i) && e.length < 80
+  ))].slice(0, 8);
+
+  const phones = [...new Set(
+    (text.match(phoneRegex) || []).map(p => p.trim()).filter(p => p.replace(/\D/g, "").length >= 7)
+  )].slice(0, 6);
+
+  // If regex found emails, use them directly (no OpenAI needed)
+  if (emails.length > 0) return { emails, phones };
+
+  // Fallback to OpenAI only if regex found nothing
+  if (OPENAI_API_KEY && text.length > 200) {
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+        body: JSON.stringify({
+          model: "gpt-4o-mini", max_tokens: 200, temperature: 0,
+          messages: [
+            { role: "system", content: `Extract emails and phones from text. Return ONLY JSON: {"emails":[],"phones":[]}` },
+            { role: "user",   content: text.slice(0, 3000) },
+          ],
+        }),
+      });
+      const d = await res.json();
+      const content = d.choices?.[0]?.message?.content?.trim() || "";
+      const match = content.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        return {
+          emails: (parsed.emails || []).filter((e: string) => typeof e === "string" && e.includes("@")).slice(0, 8),
+          phones: (parsed.phones || []).filter((p: string) => typeof p === "string").slice(0, 6),
+        };
+      }
+    } catch {}
+  }
+
+  return { emails, phones };
+}
+
+// ─── AI Insight ───────────────────────────────────────────────────────────────
+
 async function generateAIInsight(
   place: PlaceResult, industry: string, priority: string,
-  score: number, loc: string, emails: string[], phones: string[]
+  score: number, loc: string, email: string | null
 ): Promise<string> {
-  const phone   = phones[0] || place.formatted_phone_number || place.international_phone_number || "";
-  const email   = emails[0] || null;
-  const base    =
+  const phone = place.formatted_phone_number || place.international_phone_number || "";
+  const base  =
     `${place.name} is a ${priority.toLowerCase()}-priority ${industry} lead in ${loc} (score: ${score}/100).` +
     (place.rating ? ` Rated ${place.rating}⭐ by ${(place.user_ratings_total||0).toLocaleString()} customers.` : "") +
-    (place.website ? ` Website: ${place.website.replace(/https?:\/\//, "").split("/")[0]}.` : " No website — great cold outreach opportunity.") +
-    (phone ? ` Phone: ${phone}.` : " No phone listed.") +
+    (place.website ? ` Website: ${place.website.replace(/https?:\/\//, "").split("/")[0]}.` : " No website.") +
+    (phone ? " Phone available." : " No phone listed.") +
     (email ? ` Email: ${email}.` : "");
   if (!OPENAI_API_KEY) return base;
   try {
@@ -389,81 +313,84 @@ async function generateAIInsight(
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
       body: JSON.stringify({
-        model: "gpt-4o-mini", max_tokens: 120, temperature: 0.7,
+        model: "gpt-4o-mini", max_tokens: 100, temperature: 0.7,
         messages: [{ role: "user", content:
-          `B2B analyst: 2-3 sentences on why this is a good lead (no bullets, no score):
-Business: ${place.name} | Industry: ${industry} | Location: ${place.formatted_address||loc}
-Types: ${(place.types||[]).join(", ")} | Rating: ${place.rating||"N/A"} (${place.user_ratings_total||0} reviews)
-Has Website: ${place.website?"Yes":"No"} | Has Phone: ${phone?"Yes":"No"} | Emails found: ${emails.length}` }],
+          `B2B analyst: 2 sentences why this is a good lead (no bullets):
+${place.name} | ${industry} | ${place.formatted_address||loc} | Rating: ${place.rating||"N/A"} (${place.user_ratings_total||0}) | Website: ${place.website?"Yes":"No"} | Phone: ${phone?"Yes":"No"}` }],
       }),
     });
     const d    = await res.json();
     const text = d.choices?.[0]?.message?.content?.trim() || "";
     if (!text) return base;
-    return `${text}\n\n📊 Score: ${score}/100 · Priority: ${priority}` +
-      (place.rating ? ` · ⭐ ${place.rating} (${(place.user_ratings_total||0).toLocaleString()} reviews)` : "") +
-      (phone ? ` · 📞 ${phone}` : " · No phone listed") +
+    return `${text}\n\n📊 ${score}/100 · ${priority}` +
+      (place.rating ? ` · ⭐ ${place.rating} (${(place.user_ratings_total||0).toLocaleString()})` : "") +
+      (phone ? " · 📞 Phone" : "") +
       (email ? ` · 📧 ${email}` : "");
   } catch { return base; }
 }
 
-async function buildLeads(places: PlaceResult[], loc: string): Promise<LeadResult[]> {
+// ─── Build leads FAST (guessed emails only, scraping in background) ───────────
+
+async function buildLeadsFast(places: PlaceResult[], loc: string): Promise<LeadResult[]> {
   const out: LeadResult[] = [];
   for (let i = 0; i < places.length; i += 10) {
-    const batch = await Promise.all(places.slice(i, i+10).map(async p => {
+    const batch = await Promise.all(places.slice(i, i + 10).map(async p => {
       const score    = scorePlace(p);
       const priority = score >= 70 ? "High" : score >= 45 ? "Medium" : "Low";
-      const ind      = inferIndustry(p.types||[]);
-
-      // ── Scrape website for real contact info ─────────────────────────────
-      let scrapedEmails: string[] = [];
-      let scrapedPhones: string[] = [];
-
-      if (p.website) {
-        try {
-          const scraped = await scrapeContactInfo(p.website);
-          scrapedEmails = scraped.emails;
-          scrapedPhones = scraped.phones;
-        } catch {
-          // scraping failed, fallback below
-        }
-      }
-
-      // ── Phones: merge Google + scraped ───────────────────────────────────
-      const googlePhone = p.formatted_phone_number || p.international_phone_number || "";
-      const allPhones = [...new Set([
-        ...(googlePhone ? [googlePhone] : []),
-        ...scrapedPhones,
-      ])];
-
-      // ── Emails: scraped real ones, fallback to guess ──────────────────────
-      const allEmails = scrapedEmails.length > 0
-        ? scrapedEmails
-        : (guessEmail(p.website||"") ? [guessEmail(p.website||"")!] : []);
-
-      const insight  = await generateAIInsight(p, ind, priority, score, loc, allEmails, allPhones);
-
+      const ind      = inferIndustry(p.types || []);
+      const phone    = p.formatted_phone_number || p.international_phone_number || "";
+      const guessed  = guessEmail(p.website || "");
+      const insight  = await generateAIInsight(p, ind, priority, score, loc, guessed);
       return {
         placeId:     p.place_id,
         company:     p.name,
-        address:     p.formatted_address||"",
-        phone:       allPhones[0] || "",       // primary phone (backward compat)
-        phones:      allPhones,                // all phones
-        email:       allEmails[0] || null,     // primary email (backward compat)
-        emails:      allEmails,                // all emails
-        website:     p.website||"",
+        address:     p.formatted_address || "",
+        phone,
+        phones:      phone ? [phone] : [],
+        email:       guessed,
+        emails:      guessed ? [guessed] : [],
+        website:     p.website || "",
         industry:    ind,
-        rating:      p.rating||null,
-        reviewCount: p.user_ratings_total||0,
+        rating:      p.rating || null,
+        reviewCount: p.user_ratings_total || 0,
         score, priority, aiInsight: insight,
         linkedinUrl: `https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(p.name)}`,
         fromCache:   false,
-      };
+      } as LeadResult;
     }));
     out.push(...batch);
   }
   return out;
 }
+
+// ─── Background enrichment (runs after response is sent) ─────────────────────
+
+async function enrichLeadsInBackground(leads: LeadResult[], cacheKey: string, location: string) {
+  console.log(`[BG] Scraping ${leads.filter(l => l.website).length} websites...`);
+  const withSite = leads.filter(l => l.website);
+
+  // All websites scraped in parallel
+  const scraped = await Promise.all(
+    withSite.map(async lead => ({ placeId: lead.placeId, ...(await scrapeContactInfo(lead.website)) }))
+  );
+
+  const scrapeMap = new Map(scraped.map(s => [s.placeId, s]));
+  const enriched  = leads.map(lead => {
+    const s = scrapeMap.get(lead.placeId);
+    if (!s || (s.emails.length === 0 && s.phones.length === 0)) return lead;
+
+    const allPhones = [...new Set([...(lead.phone ? [lead.phone] : []), ...(s.phones || [])])];
+    const allEmails = s.emails.length > 0 ? s.emails : (lead.email ? [lead.email] : []);
+
+    return { ...lead, phones: allPhones, phone: allPhones[0] || lead.phone, emails: allEmails, email: allEmails[0] || lead.email };
+  });
+
+  memWrite(cacheKey, enriched);
+  dbWrite(cacheKey, enriched, location).catch(() => {});
+  console.log(`[BG] Done. Cache updated for "${cacheKey}"`);
+}
+
+// ─── Save to DB ───────────────────────────────────────────────────────────────
 
 async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
   try {
@@ -475,21 +402,11 @@ async function saveLeadsToDB(leads: LeadResult[], userEmail: string) {
         if (!exists) {
           await (db as any).lead.create({
             data: {
-              userId:    user.id,
-              company:   lead.company,
-              address:   lead.address,
-              phone:     lead.phone||null,
-              email:     lead.email||null,
-              website:   lead.website||null,
-              industry:  lead.industry,
-              score:     lead.score,
-              priority:  lead.priority,
-              aiInsights:lead.aiInsight,
-              source:    "google_maps",
-              placeId:   lead.placeId,
-              linkedinUrl: lead.linkedinUrl,
-              saved:     false,
-              status:    "new",
+              userId: user.id, company: lead.company, address: lead.address,
+              phone: lead.phone||null, email: lead.email||null, website: lead.website||null,
+              industry: lead.industry, score: lead.score, priority: lead.priority,
+              aiInsights: lead.aiInsight, source: "google_maps", placeId: lead.placeId,
+              linkedinUrl: lead.linkedinUrl, saved: false, status: "new",
             },
           });
         }
@@ -524,70 +441,53 @@ export async function POST(req: NextRequest) {
 
     console.log(`\n=== SEARCH: "${cacheKey}" | excluded=${excludeSet.size} ===`);
 
-    // ── Load pool from cache ──────────────────────────────────────────────────
+    // ── Cache check ───────────────────────────────────────────────────────────
     let pool = memRead(cacheKey);
     if (!pool) {
       pool = await dbRead(cacheKey);
       if (pool) memWrite(cacheKey, pool);
     }
 
-    // ── Cache hit: return next unseen batch ───────────────────────────────────
     if (pool && pool.length > 0) {
       const unseen = pool.filter(l => !excludeSet.has(l.placeId));
-      console.log(`Pool: ${pool.length} | Unseen: ${unseen.length}`);
-
       if (unseen.length > 0) {
         const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
-        console.log(`Returning ${toReturn.length} from cache`);
-        return NextResponse.json({
-          leads: toReturn,
-          total: toReturn.length,
-          totalInPool: pool.length,
-          remainingUnseen: unseen.length - toReturn.length,
-        });
+        return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: pool.length, remainingUnseen: unseen.length - toReturn.length });
       }
-
-      console.log("All cached leads seen");
-      return NextResponse.json({
-        leads: [], total: 0, totalInPool: pool.length, exhausted: true,
-        message: "You've seen all available leads for this search. Try a different keyword or location.",
-      });
+      return NextResponse.json({ leads: [], total: 0, totalInPool: pool.length, exhausted: true, message: "All leads seen. Try a different keyword or location." });
     }
 
-    // ── No cache: run 3 parallel Google queries ───────────────────────────────
-    console.log("No cache — running 3 parallel Google queries...");
-
+    // ── Fetch from Google ─────────────────────────────────────────────────────
+    console.log("Fetching from Google...");
     const allPlaceIds = await fetchAllPlaceIds(rawKeyword, rawLocation);
-
     if (!allPlaceIds.length) {
-      return NextResponse.json({ leads: [], total: 0, message: "No results found for this search." });
+      return NextResponse.json({ leads: [], total: 0, message: "No results found." });
     }
 
-    // Fetch details for all places in parallel
-    console.log(`Fetching details for ${allPlaceIds.length} places...`);
     const details  = await Promise.all(allPlaceIds.map(id => getDetails(id)));
     const places   = details.filter(Boolean) as PlaceResult[];
 
-    // Build leads with scraping + AI insights
-    console.log(`Building leads for ${places.length} places...`);
-    const allLeads = await buildLeads(places, displayLoc);
-    console.log(`Total leads built: ${allLeads.length}`);
+    // Build leads fast (guessed emails, no website scraping yet)
+    const allLeads = await buildLeadsFast(places, displayLoc);
+    console.log(`Built ${allLeads.length} leads. Sending response now.`);
 
-    // Cache full pool
+    // Write to cache immediately
     memWrite(cacheKey, allLeads);
     dbWrite(cacheKey, allLeads, displayLoc).catch(() => {});
     if (userEmail) saveLeadsToDB(allLeads, userEmail).catch(() => {});
 
-    // Return first batch
+    // Return results to user immediately
     const unseen   = allLeads.filter(l => !excludeSet.has(l.placeId));
     const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
-    console.log(`Returning first ${toReturn.length} of ${allLeads.length}`);
+
+    // Start background scraping (non-blocking — user already has results)
+    enrichLeadsInBackground(allLeads, cacheKey, displayLoc).catch(e =>
+      console.error("[BG] Error:", e)
+    );
 
     return NextResponse.json({
-      leads: toReturn,
-      total: toReturn.length,
-      totalInPool: allLeads.length,
-      remainingUnseen: unseen.length - toReturn.length,
+      leads: toReturn, total: toReturn.length,
+      totalInPool: allLeads.length, remainingUnseen: unseen.length - toReturn.length,
     });
 
   } catch (error: any) {
