@@ -13,8 +13,22 @@ export default function ContactPage() {
   });
   const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
 
+  // Feedback form state
+  const [feedbackData, setFeedbackData] = useState({
+    name: "",
+    email: "",
+    rating: 0,
+    category: "",
+    message: "",
+  });
+  const [feedbackStatus, setFeedbackStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleFeedbackChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    setFeedbackData({ ...feedbackData, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -22,7 +36,6 @@ export default function ContactPage() {
     setStatus("sending");
 
     try {
-      // Option 1: Formspree — replace YOUR_FORM_ID with your actual Formspree form ID
       const response = await fetch("https://formspree.io/f/YOUR_FORM_ID", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "application/json" },
@@ -40,6 +53,29 @@ export default function ContactPage() {
     }
   };
 
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (feedbackData.rating === 0) return;
+    setFeedbackStatus("sending");
+
+    try {
+      const response = await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(feedbackData),
+      });
+
+      if (response.ok) {
+        setFeedbackStatus("sent");
+        setFeedbackData({ name: "", email: "", rating: 0, category: "", message: "" });
+      } else {
+        setFeedbackStatus("error");
+      }
+    } catch {
+      setFeedbackStatus("error");
+    }
+  };
+
   const contactCards = [
     { icon: "📧", title: "General Inquiries", desc: "Questions about Fatila or our company.", email: "info@ftisolutions.tech", time: "Within 3 business day" },
     { icon: "🛠️", title: "Customer Support", desc: "Technical issues, account help, how-to questions.", email: "info@ftisolutions.tech", time: "Within 3 business days" },
@@ -48,6 +84,8 @@ export default function ContactPage() {
     { icon: "🤝", title: "Partnerships", desc: "Integration partners, affiliates, media inquiries.", email: "info@ftisolutions.tech", time: "Within 3 business days" },
     { icon: "🏢", title: "Enterprise Sales", desc: "Custom plans, API access, volume pricing.", email: "info@ftisolutions.tech", time: "Within 3 business day" },
   ];
+
+  const starLabels = ["Terrible", "Poor", "Okay", "Good", "Excellent"];
 
   return (
     <LegalLayout title="Contact Us">
@@ -96,97 +134,140 @@ export default function ContactPage() {
         </p>
       </div>
 
-      {/* <h2>Send Us a Message</h2>
+      {/* ── Feedback Form ── */}
+      <h2>Leave Feedback</h2>
+      <p>We'd love to hear what you think. Your feedback helps us improve Fatila for everyone.</p>
 
-      <form onSubmit={handleSubmit} className="bg-[rgba(255,255,255,0.04)] p-8 rounded-xl border border-[rgba(0,170,255,.2)] my-6 not-prose">
-        <p className="text-[#cdd9ff] text-sm mb-6">Use the form below, and we'll route your message to the right team.</p>
+      <div className="bg-[rgba(255,255,255,0.04)] p-8 rounded-xl border border-[rgba(0,170,255,.2)] my-6 not-prose">
+        {feedbackStatus === "sent" ? (
+          <div className="text-center py-8">
+            <div className="text-5xl mb-4">🎉</div>
+            <p className="text-[#39d353] text-xl font-semibold mb-2">Thank you for your feedback!</p>
+            <p className="text-[#cdd9ff] text-sm">Your response has been recorded and helps us build a better product.</p>
+            <button
+              onClick={() => setFeedbackStatus("idle")}
+              className="mt-6 px-6 py-2 rounded-[40px] text-sm font-semibold bg-[rgba(57,211,83,0.1)] border border-[#39d353] text-[#39d353] hover:bg-[rgba(57,211,83,0.2)] transition-all cursor-pointer"
+            >
+              Submit another response
+            </button>
+          </div>
+        ) : (
+          <>
+            <p className="text-[#cdd9ff] text-sm mb-6">
+              All fields are required. Your feedback is stored securely and only used to improve our services.
+            </p>
 
-        <div className="mb-5">
-          <label className="block text-white font-semibold mb-2 text-sm">Your Name *</label>
-          <input
-            type="text"
-            name="name"
-            value={formData.name}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
-          />
-        </div>
+            {/* Star Rating */}
+            <div className="mb-6">
+              <label className="block text-white font-semibold mb-3 text-sm">
+                Overall Rating *
+              </label>
+              <div className="flex gap-2 items-center">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setFeedbackData({ ...feedbackData, rating: star })}
+                    className="text-3xl transition-transform duration-150 hover:scale-125 cursor-pointer bg-transparent border-none p-0 leading-none"
+                    aria-label={`Rate ${star} out of 5`}
+                  >
+                    <span className={star <= feedbackData.rating ? "text-yellow-400" : "text-[rgba(255,255,255,0.2)]"}>
+                      ★
+                    </span>
+                  </button>
+                ))}
+                {feedbackData.rating > 0 && (
+                  <span className="ml-3 text-[#9fb8e6] text-sm">
+                    {starLabels[feedbackData.rating - 1]}
+                  </span>
+                )}
+              </div>
+            </div>
 
-        <div className="mb-5">
-          <label className="block text-white font-semibold mb-2 text-sm">Email Address *</label>
-          <input
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
-          />
-        </div>
+            <div className="mb-5">
+              <label className="block text-white font-semibold mb-2 text-sm">Your Name *</label>
+              <input
+                type="text"
+                name="name"
+                value={feedbackData.name}
+                onChange={handleFeedbackChange}
+                required
+                placeholder="Jane Smith"
+                className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white placeholder-[rgba(255,255,255,0.25)] focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
+              />
+            </div>
 
-        <div className="mb-5">
-          <label className="block text-white font-semibold mb-2 text-sm">Company (Optional)</label>
-          <input
-            type="text"
-            name="company"
-            value={formData.company}
-            onChange={handleChange}
-            className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
-          />
-        </div>
+            <div className="mb-5">
+              <label className="block text-white font-semibold mb-2 text-sm">Email Address *</label>
+              <input
+                type="email"
+                name="email"
+                value={feedbackData.email}
+                onChange={handleFeedbackChange}
+                required
+                placeholder="jane@example.com"
+                className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white placeholder-[rgba(255,255,255,0.25)] focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
+              />
+            </div>
 
-        <div className="mb-5">
-          <label className="block text-white font-semibold mb-2 text-sm">Topic *</label>
-          <select
-            name="topic"
-            value={formData.topic}
-            onChange={handleChange}
-            required
-            className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
-          >
-            <option value="">— Select a topic —</option>
-            <option value="general">General Inquiry</option>
-            <option value="support">Technical Support</option>
-            <option value="billing">Billing / Refund</option>
-            <option value="privacy">Privacy / Data Request</option>
-            <option value="partnership">Partnership</option>
-            <option value="sales">Enterprise Sales</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
+            <div className="mb-5">
+              <label className="block text-white font-semibold mb-2 text-sm">Feedback Category *</label>
+              <select
+                name="category"
+                value={feedbackData.category}
+                onChange={handleFeedbackChange}
+                required
+                className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all"
+              >
+                <option value="">— Select a category —</option>
+                <option value="ui">User Interface / Design</option>
+                <option value="performance">Performance / Speed</option>
+                <option value="features">Features & Functionality</option>
+                <option value="pricing">Pricing & Plans</option>
+                <option value="support">Customer Support</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
 
-        <div className="mb-6">
-          <label className="block text-white font-semibold mb-2 text-sm">Your Message *</label>
-          <textarea
-            name="message"
-            value={formData.message}
-            onChange={handleChange}
-            required
-            rows={5}
-            className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all resize-y"
-          />
-        </div>
+            <div className="mb-6">
+              <label className="block text-white font-semibold mb-2 text-sm">Your Feedback *</label>
+              <textarea
+                name="message"
+                value={feedbackData.message}
+                onChange={handleFeedbackChange}
+                required
+                rows={4}
+                placeholder="Tell us what you love, what could be better, or anything else on your mind..."
+                className="w-full px-4 py-3 rounded-lg bg-[rgba(7,25,65,0.6)] border border-[rgba(0,170,255,.25)] text-white placeholder-[rgba(255,255,255,0.25)] focus:outline-none focus:border-[#39d353] focus:shadow-[0_0_12px_rgba(57,211,83,.2)] transition-all resize-y"
+              />
+            </div>
 
-        <button
-          type="submit"
-          disabled={status === "sending"}
-          className="px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {status === "sending" ? "Sending..." : "Send Message"}
-        </button>
+            <button
+              onClick={handleFeedbackSubmit}
+              disabled={feedbackStatus === "sending" || feedbackData.rating === 0}
+              className="px-9 py-3 rounded-[40px] font-semibold bg-gradient-to-r from-[#39d353] to-[#2fa4ff] text-[#081633] transition-transform duration-300 hover:scale-105 cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {feedbackStatus === "sending" ? "Submitting..." : "Submit Feedback"}
+            </button>
 
-        {status === "sent" && (
-          <p className="mt-4 text-[#39d353] font-semibold">✓ Message sent successfully! We'll be in touch soon.</p>
+            {feedbackData.rating === 0 && (
+              <p className="mt-3 text-[#9fb8e6] text-xs">Please select a star rating before submitting.</p>
+            )}
+
+            {feedbackStatus === "error" && (
+              <p className="mt-4 text-red-400 font-semibold">
+                ✗ Something went wrong. Please try again or email us at{" "}
+                <a href="mailto:info@ftisolutions.tech" className="underline">info@ftisolutions.tech</a>.
+              </p>
+            )}
+
+            <p className="text-xs text-[#9fb8e6] mt-5">
+              By submitting, you agree to our{" "}
+              <a href="/privacy" className="text-[#39d353] hover:underline">Privacy Policy</a>.
+            </p>
+          </>
         )}
-        {status === "error" && (
-          <p className="mt-4 text-red-400 font-semibold">✗ Something went wrong. Please email us directly at hello@fatilaai.com</p>
-        )}
-
-        <p className="text-xs text-[#9fb8e6] mt-5">
-          By submitting this form, you agree to our <a href="/privacy" className="text-[#39d353] hover:underline">Privacy Policy</a>.
-        </p>
-      </form> */}
+      </div>
     </LegalLayout>
   );
 }

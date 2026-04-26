@@ -119,3 +119,12 @@ model SearchCache {
   createdAt DateTime @default(now())
   expiresAt DateTime
 }
+model Feedback {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  rating    Int      // 1–5
+  category  String
+  message   String
+  createdAt DateTime @default(now())
+}
