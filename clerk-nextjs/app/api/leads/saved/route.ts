@@ -72,8 +72,20 @@ export async function POST(req: NextRequest) {
 
     console.log(`✅ Found ${total} saved leads, returning ${leads.length}`);
 
+    // Parse emails — stored as JSON string in DB, return as array
+    const parsedLeads = leads.map((lead: any) => {
+      let emails: string[] = [];
+      try {
+        if (Array.isArray(lead.emails)) emails = lead.emails;
+        else if (typeof lead.emails === "string" && lead.emails) emails = JSON.parse(lead.emails);
+      } catch {}
+      // Make sure primary email is always included
+      if (lead.email && !emails.includes(lead.email)) emails = [lead.email, ...emails];
+      return { ...lead, emails };
+    });
+
     return NextResponse.json({
-      leads,
+      leads: parsedLeads,
       total,
       pages: Math.ceil(total / Number(limit)),
       page:  Number(page),

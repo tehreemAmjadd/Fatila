@@ -28,6 +28,7 @@ const TABS = [
 
 interface SavedLead {
   id:string; company:string; email:string|null;
+  emails?: string[];   // all scraped emails
   industry:string|null; score:number; priority:string;
 }
 interface EmailLog {
@@ -92,6 +93,8 @@ export default function EmailsPage() {
   const [savedLeads,       setSavedLeads]       = useState<SavedLead[]>([]);
   const [savedLeadsLoading,setSavedLeadsLoading] = useState(false);
   const [leadSearch,       setLeadSearch]       = useState("");
+  const [selectedLeadId,   setSelectedLeadId]   = useState<string|null>(null);
+  const [emailDropdownOpen,setEmailDropdownOpen] = useState(false);
 
   // Bulk
   const [leads,          setLeads]          = useState<SavedLead[]>([]);
@@ -165,7 +168,8 @@ export default function EmailsPage() {
     try {
       const res  = await fetch("/api/leads/saved", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email:userEmail, page:1, limit:200 }) });
       const data = await res.json();
-      setSavedLeads((data.leads||[]).filter((l:any)=>l.email));
+      // Include leads that have either email or emails array
+      setSavedLeads((data.leads||[]).filter((l:any)=> l.email || (l.emails && l.emails.length > 0)));
     } catch(e){console.error(e);}
     finally{setSavedLeadsLoading(false);}
   },[userEmail]);
@@ -376,18 +380,76 @@ export default function EmailsPage() {
                     <div className="sidebar-empty"><Inbox size={24} color="#8899bb" strokeWidth={1.2}/><p>No saved leads with email</p></div>
                   ):(
                     <div className="sidebar-list">
-                      {savedLeads.filter(l=>l.company.toLowerCase().includes(leadSearch.toLowerCase())||(l.email||"").toLowerCase().includes(leadSearch.toLowerCase())).map(lead=>(
-                        <div key={lead.id}
-                          className={`sidebar-lead ${toEmail===lead.email?"active":""}`}
-                          onClick={()=>{setToEmail(lead.email||"");setAiCompany(lead.company);setAiIndustry(lead.industry||"");}}>
-                          <div className="sidebar-av">{lead.company.charAt(0).toUpperCase()}</div>
-                          <div className="sidebar-info">
-                            <span className="sidebar-company">{lead.company}</span>
-                            <span className="sidebar-email">{lead.email}</span>
+                      {savedLeads.filter(l=>l.company.toLowerCase().includes(leadSearch.toLowerCase())||(l.email||"").toLowerCase().includes(leadSearch.toLowerCase())).map(lead=>{
+                        const allEmails = lead.emails && lead.emails.length > 0 ? lead.emails : (lead.email ? [lead.email] : []);
+                        const isSelected = selectedLeadId === lead.id;
+                        return (
+                          <div key={lead.id} style={{display:"flex",flexDirection:"column",gap:0}}>
+                            <div
+                              className={`sidebar-lead ${isSelected?"active":""}`}
+                              onClick={()=>{
+                                setSelectedLeadId(lead.id);
+                                setAiCompany(lead.company);
+                                setAiIndustry(lead.industry||"");
+                                // If only one email, set directly; else open dropdown
+                                if (allEmails.length <= 1) {
+                                  setToEmail(allEmails[0] || lead.email || "");
+                                  setEmailDropdownOpen(false);
+                                } else {
+                                  setEmailDropdownOpen(prev => selectedLeadId === lead.id ? !prev : true);
+                                }
+                              }}>
+                              <div className="sidebar-av">{lead.company.charAt(0).toUpperCase()}</div>
+                              <div className="sidebar-info">
+                                <span className="sidebar-company">{lead.company}</span>
+                                <span className="sidebar-email">
+                                  {toEmail && isSelected ? toEmail : allEmails[0] || lead.email}
+                                  {allEmails.length > 1 && (
+                                    <span style={{marginLeft:"4px",fontSize:"10px",background:"rgba(0,255,153,.15)",color:"#00ff99",padding:"1px 5px",borderRadius:"6px"}}>
+                                      {allEmails.length} emails ▾
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              <span className="sidebar-score" style={{color:lead.priority==="High"?"#ff4d4d":lead.priority==="Medium"?"#ffd700":"#00ff99"}}>{lead.priority}</span>
+                            </div>
+
+                            {/* Email dropdown — show when lead is selected and has multiple emails */}
+                            {isSelected && emailDropdownOpen && allEmails.length > 1 && (
+                              <div style={{
+                                background:"rgba(6,16,42,0.98)",
+                                border:"1px solid rgba(0,255,153,.25)",
+                                borderRadius:"0 0 10px 10px",
+                                marginTop:"-2px",
+                                overflow:"hidden",
+                              }}>
+                                {allEmails.map((em, idx) => (
+                                  <div key={em}
+                                    onClick={()=>{ setToEmail(em); setEmailDropdownOpen(false); }}
+                                    style={{
+                                      padding:"8px 12px",
+                                      fontSize:"12px",
+                                      color: toEmail === em ? "#00ff99" : "#ccc",
+                                      background: toEmail === em ? "rgba(0,255,153,.08)" : "transparent",
+                                      cursor:"pointer",
+                                      borderBottom: idx < allEmails.length-1 ? "1px solid rgba(255,255,255,.05)" : "none",
+                                      display:"flex",
+                                      alignItems:"center",
+                                      gap:"6px",
+                                    }}
+                                    onMouseEnter={e=>(e.currentTarget.style.background="rgba(0,255,153,.1)")}
+                                    onMouseLeave={e=>(e.currentTarget.style.background=toEmail===em?"rgba(0,255,153,.08)":"transparent")}
+                                  >
+                                    <span style={{fontSize:"10px",color:"#8899bb",minWidth:"14px"}}>{idx+1}.</span>
+                                    {em}
+                                    {toEmail === em && <span style={{marginLeft:"auto",fontSize:"10px",color:"#00ff99"}}>✓</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <span className="sidebar-score" style={{color:lead.priority==="High"?"#ff4d4d":lead.priority==="Medium"?"#ffd700":"#00ff99"}}>{lead.priority}</span>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

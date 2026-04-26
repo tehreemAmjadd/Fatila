@@ -42,7 +42,9 @@ model Lead {
   company     String
   name        String?
   email       String?
+  emails      String? 
   phone       String?
+  phones      String?
   website     String?
   address     String?
   city        String?
