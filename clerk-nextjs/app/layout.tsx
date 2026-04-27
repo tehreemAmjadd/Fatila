@@ -3,6 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import { Geist, Geist_Mono } from 'next/font/google'
 import Script from 'next/script'
 import './globals.css'
+import WhatsAppWidget from './components/WhatsAppWidget'
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -141,7 +142,7 @@ export default function RootLayout({
         >
           {children}
           {/* WhatsApp floating button — visible on ALL pages */}
-          <WhatsAppButton />
+            <WhatsAppWidget />  
         </body>
       </html>
     </ClerkProvider>
