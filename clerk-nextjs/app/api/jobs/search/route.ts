@@ -193,8 +193,7 @@ async function fetchJSearchJobs(keywords: string, location: string, count: numbe
         type,
         postedAt,
         description: job.job_description
-          ? job.job_description.replace(/
-+/g, " ").slice(0, 220).trim() + "..."
+          ? job.job_description.replace(/\s+/g, " ").slice(0, 220).trim() + "..."
           : "Click Apply to view full job description.",
         applyUrl,
         source,
