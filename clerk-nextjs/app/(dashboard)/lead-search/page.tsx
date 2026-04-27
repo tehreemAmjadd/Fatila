@@ -513,7 +513,7 @@ export default function LeadSearchPage() {
               <h2>
                 {loading
                   ? "Searching..."
-                  : `${results.length} result${results.length!==1?"s":""} found${hasMore?" (aur available hain)":""}`}
+                  : `${results.length} result${results.length!==1?"s":""} found${hasMore?" (more available)":""}`}
               </h2>
               {savedIds.size > 0 && (
                 <a href="/saved-leads" className="saved-pill">
@@ -654,7 +654,7 @@ export default function LeadSearchPage() {
                   }
                 </button>
                 <p style={{marginTop:"8px",fontSize:"12px",color:"#8899bb"}}>
-                  Aur nayi companies milenge — jo pehle show ho chuki hain woh nahi aayengi
+                  New companies will be shown — previously seen results will not repeat
                 </p>
               </div>
             )}
@@ -662,7 +662,7 @@ export default function LeadSearchPage() {
             {/* Pool exhausted message */}
             {!loading && !hasMore && searched && results.length > 0 && (
               <p style={{textAlign:"center",marginTop:"16px",fontSize:"12px",color:"#556677"}}>
-                ✓ Is search ke saare available results show ho gaye hain
+                ✓ All available results for this search have been shown
               </p>
             )}
           </div>

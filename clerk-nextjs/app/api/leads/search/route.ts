@@ -114,26 +114,45 @@ async function getDetails(placeId: string): Promise<PlaceResult | null> {
   } catch { return null; }
 }
 
-// Ek query ke liye paginated fetch — next_page_token se multiple pages
+// Fetch one Google Places page, with retry on INVALID_REQUEST (token not ready yet)
+async function fetchGooglePage(url: string, retries = 3): Promise<any> {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const res  = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+      if (data.status === "INVALID_REQUEST" && attempt < retries - 1) {
+        // pagetoken not ready yet — wait longer and retry
+        await new Promise(r => setTimeout(r, 2500));
+        continue;
+      }
+      return data;
+    } catch { return null; }
+  }
+  return null;
+}
+
+// Paginated fetch for one query — up to maxPages pages (each page = 20 results)
 async function fetchWithPagination(query: string, maxPages: number = 3): Promise<string[]> {
   const ids: string[] = [];
   let pageToken: string | undefined;
+
   for (let page = 0; page < maxPages; page++) {
-    try {
-      let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
-      if (pageToken) {
-        // Google requires 2s delay before using next_page_token
-        await new Promise(r => setTimeout(r, 2000));
-        url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${pageToken}&key=${GOOGLE_API_KEY}`;
-      }
-      const res  = await fetch(url, { cache: "no-store" });
-      const data = await res.json();
-      console.log(`"${query}" page ${page+1}: ${data.status} - ${data.results?.length ?? 0}`);
-      if (data.status !== "OK" || !data.results?.length) break;
-      ids.push(...data.results.map((r: any) => r.place_id).filter(Boolean));
-      if (!data.next_page_token) break;
-      pageToken = data.next_page_token;
-    } catch { break; }
+    let url: string;
+    if (pageToken) {
+      // Google requires 2-3s before pagetoken is valid
+      await new Promise(r => setTimeout(r, 3000));
+      url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(pageToken)}&key=${GOOGLE_API_KEY}`;
+    } else {
+      url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
+    }
+
+    const data = await fetchGooglePage(url);
+    console.log(`"${query}" page ${page+1}: ${data?.status} - ${data?.results?.length ?? 0}`);
+
+    if (!data || data.status !== "OK" || !data.results?.length) break;
+    ids.push(...data.results.map((r: any) => r.place_id).filter(Boolean));
+    if (!data.next_page_token) break;
+    pageToken = data.next_page_token;
   }
   return ids;
 }
@@ -180,23 +199,24 @@ function generateQueryVariations(keyword: string, location: string): string[] {
 }
 
 async function fetchAllPlaceIds(keyword: string, location: string, targetCount: number = 20): Promise<string[]> {
-  const queries = generateQueryVariations(keyword, location);
-  const seen    = new Set<string>();
+  const queries    = generateQueryVariations(keyword, location);
+  const seen       = new Set<string>();
   const allIds: string[] = [];
-
-  // Hamesha bada pool banao — pagination ON, minimum 3 pages per query
-  // Taake Load More pe aur results mil sakein
-  const pagesPerQuery = 3;
-  const poolTarget    = Math.max(targetCount * 4, 120); // at least 4x or 120
+  // Always build a large pool so Load More has fresh results
+  // Each query: 3 pages × 20 = 60 IDs max. 6 queries = up to 360 unique IDs.
+  const poolTarget = Math.max(targetCount * 5, 150);
 
   for (const q of queries) {
     if (allIds.length >= poolTarget) break;
-    const ids = await fetchWithPagination(q, pagesPerQuery);
+    // 3 pages per query = up to 60 IDs per variation
+    const ids = await fetchWithPagination(q, 3);
     for (const id of ids) {
       if (!seen.has(id)) { seen.add(id); allIds.push(id); }
     }
+    console.log(`After query "${q}": pool size = ${allIds.length}`);
   }
-  console.log(`Total unique IDs: ${allIds.length} (poolTarget=${poolTarget}, userTarget=${targetCount})`);
+
+  console.log(`Final pool: ${allIds.length} unique IDs (target=${targetCount})`);
   return allIds;
 }
 
