@@ -138,12 +138,14 @@ export default function LeadSearchPage() {
   const [resultsLimit,  setResultsLimit]  = useState(20);
 
   // Results
-  const [results,   setResults]   = useState<LeadResult[]>([]);
-  const [loading,   setLoading]   = useState(false);
-  const [searched,  setSearched]  = useState(false);
-  const [savedIds,  setSavedIds]  = useState<Set<string>>(new Set());
-  const [savingId,  setSavingId]  = useState<string|null>(null);
-  const [saveError, setSaveError] = useState("");
+  const [results,     setResults]     = useState<LeadResult[]>([]);
+  const [loading,     setLoading]     = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [searched,    setSearched]    = useState(false);
+  const [hasMore,     setHasMore]     = useState(false);
+  const [savedIds,    setSavedIds]    = useState<Set<string>>(new Set());
+  const [savingId,    setSavingId]    = useState<string|null>(null);
+  const [saveError,   setSaveError]   = useState("");
 
   // Job Search
   const [jobPrompt,       setJobPrompt]       = useState("");
@@ -227,8 +229,9 @@ export default function LeadSearchPage() {
     setLoading(true);
     setSearched(true);
     setSaveError("");
+    setHasMore(false);
 
-    // Har fresh search pe seen IDs reset — taake dubara search pe 0 na aaye
+    // Fresh search — seen IDs reset karo (naya keyword/location)
     if (email) {
       try { sessionStorage.removeItem(makeSeenKey(email, keyword, location)); } catch {}
     }
@@ -238,10 +241,7 @@ export default function LeadSearchPage() {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
-          industry,
-          location,
-          keyword,
-          email,
+          industry, location, keyword, email,
           excludePlaceIds: [],
           resultsLimit,
         }),
@@ -250,9 +250,15 @@ export default function LeadSearchPage() {
       const newLeads: LeadResult[] = data.leads || [];
 
       setResults(newLeads);
-
-      // Session mein save karo taake page navigate karne pe bhi rahen
       saveResultsToSession(newLeads, keyword, location, industry);
+
+      // Jo leads show hue unhe seen mark karo
+      if (email && newLeads.length > 0) {
+        markLeadsAsSeen(email, keyword, location, newLeads.map(l => l.placeId));
+      }
+
+      // Agar pool mein aur bhi hain toh "Load More" dikhao
+      setHasMore((data.remainingUnseen ?? 0) > 0);
 
       await fetchUser();
     } catch(err) {
@@ -260,6 +266,48 @@ export default function LeadSearchPage() {
       setResults([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ── Load More (next batch — same keyword/location, seen exclude) ──────────
+  const handleLoadMore = async () => {
+    if (!canSearch || loadingMore) return;
+    setLoadingMore(true);
+    setSaveError("");
+
+    const seenIds = email ? [...getSeenLeadIds(email, keyword, location)] : [];
+
+    try {
+      const res = await fetch("/api/leads/search", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          industry, location, keyword, email,
+          excludePlaceIds: seenIds,
+          resultsLimit,
+        }),
+      });
+      const data = await res.json();
+      const newLeads: LeadResult[] = data.leads || [];
+
+      if (newLeads.length === 0) {
+        setHasMore(false);
+        return;
+      }
+
+      const combined = [...results, ...newLeads];
+      setResults(combined);
+      saveResultsToSession(combined, keyword, location, industry);
+
+      if (email) {
+        markLeadsAsSeen(email, keyword, location, newLeads.map(l => l.placeId));
+      }
+
+      setHasMore((data.remainingUnseen ?? 0) > 0);
+    } catch(err) {
+      console.error(err);
+    } finally {
+      setLoadingMore(false);
     }
   };
 
@@ -465,7 +513,7 @@ export default function LeadSearchPage() {
               <h2>
                 {loading
                   ? "Searching..."
-                  : `${results.length} result${results.length!==1?"s":""} found`}
+                  : `${results.length} result${results.length!==1?"s":""} found${hasMore?" (aur available hain)":""}`}
               </h2>
               {savedIds.size > 0 && (
                 <a href="/saved-leads" className="saved-pill">
@@ -584,6 +632,38 @@ export default function LeadSearchPage() {
                   );
                 })}
               </div>
+            )}
+
+            {/* ── LOAD MORE BUTTON ── */}
+            {!loading && hasMore && results.length > 0 && (
+              <div style={{textAlign:"center",marginTop:"20px"}}>
+                <button
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  style={{
+                    display:"inline-flex",alignItems:"center",gap:"8px",
+                    background:"rgba(59,158,255,.12)",border:"1px solid rgba(59,158,255,.35)",
+                    color:"#3b9eff",padding:"12px 32px",borderRadius:"30px",
+                    fontSize:"14px",fontWeight:"700",cursor:loadingMore?"not-allowed":"pointer",
+                    transition:".2s",opacity:loadingMore?.7:1,
+                  }}
+                >
+                  {loadingMore
+                    ? <><RefreshCw size={15} className="spin"/>Loading more...</>
+                    : <><ChevronRight size={15}/>Load More Results</>
+                  }
+                </button>
+                <p style={{marginTop:"8px",fontSize:"12px",color:"#8899bb"}}>
+                  Aur nayi companies milenge — jo pehle show ho chuki hain woh nahi aayengi
+                </p>
+              </div>
+            )}
+
+            {/* Pool exhausted message */}
+            {!loading && !hasMore && searched && results.length > 0 && (
+              <p style={{textAlign:"center",marginTop:"16px",fontSize:"12px",color:"#556677"}}>
+                ✓ Is search ke saare available results show ho gaye hain
+              </p>
             )}
           </div>
         )}

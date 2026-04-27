@@ -114,67 +114,89 @@ async function getDetails(placeId: string): Promise<PlaceResult | null> {
   } catch { return null; }
 }
 
-async function fetchOnePage(query: string): Promise<string[]> {
-  try {
-    const url  = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
-    const res  = await fetch(url, { cache: "no-store" });
-    const data = await res.json();
-    console.log(`"${query}": ${data.status} - ${data.results?.length ?? 0}`);
-    if (data.status !== "OK" || !data.results?.length) return [];
-    return data.results.map((r: any) => r.place_id).filter(Boolean);
-  } catch { return []; }
+// Ek query ke liye paginated fetch — next_page_token se multiple pages
+async function fetchWithPagination(query: string, maxPages: number = 3): Promise<string[]> {
+  const ids: string[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < maxPages; page++) {
+    try {
+      let url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&key=${GOOGLE_API_KEY}`;
+      if (pageToken) {
+        // Google requires 2s delay before using next_page_token
+        await new Promise(r => setTimeout(r, 2000));
+        url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${pageToken}&key=${GOOGLE_API_KEY}`;
+      }
+      const res  = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+      console.log(`"${query}" page ${page+1}: ${data.status} - ${data.results?.length ?? 0}`);
+      if (data.status !== "OK" || !data.results?.length) break;
+      ids.push(...data.results.map((r: any) => r.place_id).filter(Boolean));
+      if (!data.next_page_token) break;
+      pageToken = data.next_page_token;
+    } catch { break; }
+  }
+  return ids;
 }
 
 function generateQueryVariations(keyword: string, location: string): string[] {
   const kw  = keyword.toLowerCase().trim();
   const loc = location.trim();
   const synonyms: Record<string, string[]> = {
-    "software companies":  ["software houses", "software firms", "IT companies"],
-    "software company":    ["software house", "software firm", "IT company"],
-    "software house":      ["software company", "software firm", "IT firm"],
-    "software houses":     ["software companies", "IT companies", "tech companies"],
-    "it companies":        ["software companies", "tech companies", "IT firms"],
-    "it company":          ["software company", "tech company", "IT firm"],
-    "dental clinic":       ["dentist", "dental center", "dental office"],
-    "dental clinics":      ["dentists", "dental centers", "dental offices"],
-    "restaurant":          ["cafe", "eatery", "food place"],
-    "restaurants":         ["cafes", "eateries", "food places"],
-    "law firm":            ["lawyer", "legal firm", "attorney"],
-    "law firms":           ["lawyers", "legal firms", "attorneys"],
-    "real estate":         ["property dealer", "real estate agency", "property agent"],
-    "hospital":            ["clinic", "medical center", "healthcare center"],
+    "software companies":  ["software houses", "software firms", "IT companies", "tech companies", "development companies"],
+    "software company":    ["software house", "software firm", "IT company", "tech company"],
+    "software house":      ["software company", "software firm", "IT firm", "development firm"],
+    "software houses":     ["software companies", "IT companies", "tech companies", "development firms"],
+    "it companies":        ["software companies", "tech companies", "IT firms", "technology companies"],
+    "it company":          ["software company", "tech company", "IT firm", "technology company"],
+    "dental clinic":       ["dentist", "dental center", "dental office", "dental hospital"],
+    "dental clinics":      ["dentists", "dental centers", "dental offices", "dental hospitals"],
+    "restaurant":          ["cafe", "eatery", "food place", "diner", "bistro"],
+    "restaurants":         ["cafes", "eateries", "food places", "diners"],
+    "law firm":            ["lawyer", "legal firm", "attorney", "advocates"],
+    "law firms":           ["lawyers", "legal firms", "attorneys", "law offices"],
+    "real estate":         ["property dealer", "real estate agency", "property agent", "estate agent"],
+    "hospital":            ["clinic", "medical center", "healthcare center", "medical hospital"],
     "hospitals":           ["clinics", "medical centers", "healthcare centers"],
-    "gym":                 ["fitness center", "health club", "workout center"],
+    "gym":                 ["fitness center", "health club", "workout center", "fitness studio"],
     "gyms":                ["fitness centers", "health clubs", "workout centers"],
-    "school":              ["academy", "institute", "educational center"],
-    "schools":             ["academies", "institutes", "educational centers"],
-    "hotel":               ["guest house", "inn", "lodging"],
-    "hotels":              ["guest houses", "inns", "lodgings"],
-    "marketing agency":    ["digital agency", "advertising agency", "marketing firm"],
+    "school":              ["academy", "institute", "educational center", "college"],
+    "schools":             ["academies", "institutes", "educational centers", "colleges"],
+    "hotel":               ["guest house", "inn", "lodging", "motel"],
+    "hotels":              ["guest houses", "inns", "lodgings", "motels"],
+    "marketing agency":    ["digital agency", "advertising agency", "marketing firm", "digital marketing"],
     "marketing agencies":  ["digital agencies", "advertising agencies", "marketing firms"],
-    "construction":        ["builder", "contractor", "construction company"],
-    "pharmacy":            ["chemist", "drugstore", "medical store"],
+    "construction":        ["builder", "contractor", "construction company", "construction firm"],
+    "pharmacy":            ["chemist", "drugstore", "medical store", "medicine shop"],
     "pharmacies":          ["chemists", "drugstores", "medical stores"],
   };
   let variations: string[] = [];
   for (const [key, syns] of Object.entries(synonyms)) {
-    if (kw.includes(key)) { variations = syns.map(s => kw.replace(key, s)); break; }
+    if (kw.includes(key)) { variations = syns; break; }
   }
-  if (!variations.length) variations = [`${kw} company`, `best ${kw}`];
-  return [...new Set([`${kw} ${loc}`, `${variations[0]} ${loc}`, `${variations[1] || variations[0]} ${loc}`])];
+  if (!variations.length) variations = [`${kw} company`, `best ${kw}`, `top ${kw}`, `${kw} firm`];
+  // Base + up to 5 variations = 6 total queries
+  const allVariations = [kw, ...variations.slice(0, 5)];
+  return [...new Set(allVariations.map(v => `${v} ${loc}`))];
 }
 
-async function fetchAllPlaceIds(keyword: string, location: string): Promise<string[]> {
+async function fetchAllPlaceIds(keyword: string, location: string, targetCount: number = 20): Promise<string[]> {
   const queries = generateQueryVariations(keyword, location);
-  const results = await Promise.all(queries.map(q => fetchOnePage(q)));
-  const seen = new Set<string>();
+  const seen    = new Set<string>();
   const allIds: string[] = [];
-  for (const ids of results) {
+
+  // Hamesha bada pool banao — pagination ON, minimum 3 pages per query
+  // Taake Load More pe aur results mil sakein
+  const pagesPerQuery = 3;
+  const poolTarget    = Math.max(targetCount * 4, 120); // at least 4x or 120
+
+  for (const q of queries) {
+    if (allIds.length >= poolTarget) break;
+    const ids = await fetchWithPagination(q, pagesPerQuery);
     for (const id of ids) {
       if (!seen.has(id)) { seen.add(id); allIds.push(id); }
     }
   }
-  console.log(`Total unique IDs: ${allIds.length}`);
+  console.log(`Total unique IDs: ${allIds.length} (poolTarget=${poolTarget}, userTarget=${targetCount})`);
   return allIds;
 }
 
@@ -444,7 +466,7 @@ export async function POST(req: NextRequest) {
 
     // ── Fetch fresh from Google ───────────────────────────────────────────────
     console.log("Fresh fetch from Google...");
-    const allPlaceIds = await fetchAllPlaceIds(rawKeyword, rawLocation);
+    const allPlaceIds = await fetchAllPlaceIds(rawKeyword, rawLocation, resultsLimit);
     if (!allPlaceIds.length) {
       return NextResponse.json({ leads: [], total: 0, message: "No results found." });
     }
