@@ -28,7 +28,7 @@ export const metadata: Metadata = {
 function WhatsAppButton() {
   // Change this to your actual WhatsApp business number (country code + number, no + or spaces)
   // Example: Pakistan +92 300 1234567 → "923001234567"
-  const phoneNumber = "923001234567";
+  const phoneNumber = "923132600524";
   const message = "Hello! I have a query about Fatila AI.";
   const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
 
