@@ -131,10 +131,11 @@ export default function LeadSearchPage() {
   const { user } = useUser();
 
   // Filters — restored from session on mount
-  const [industry,    setIndustry]    = useState("");
-  const [location,    setLocation]    = useState("");
-  const [keyword,     setKeyword]     = useState("");
-  const [companySize, setCompanySize] = useState("");
+  const [industry,      setIndustry]      = useState("");
+  const [location,      setLocation]      = useState("");
+  const [keyword,       setKeyword]       = useState("");
+  const [companySize,   setCompanySize]   = useState("");
+  const [resultsLimit,  setResultsLimit]  = useState(20);
 
   // Results
   const [results,   setResults]   = useState<LeadResult[]>([]);
@@ -227,9 +228,10 @@ export default function LeadSearchPage() {
     setSearched(true);
     setSaveError("");
 
-    // Sirf is keyword+location combination ki seen leads exclude karo
-    // Alag keywords ki leads mix nahi hoti
-    const seenIds = email ? [...getSeenLeadIds(email, keyword, location)] : [];
+    // Har fresh search pe seen IDs reset — taake dubara search pe 0 na aaye
+    if (email) {
+      try { sessionStorage.removeItem(makeSeenKey(email, keyword, location)); } catch {}
+    }
 
     try {
       const res = await fetch("/api/leads/search", {
@@ -240,7 +242,8 @@ export default function LeadSearchPage() {
           location,
           keyword,
           email,
-          excludePlaceIds: seenIds,
+          excludePlaceIds: [],
+          resultsLimit,
         }),
       });
       const data = await res.json();
@@ -250,11 +253,6 @@ export default function LeadSearchPage() {
 
       // Session mein save karo taake page navigate karne pe bhi rahen
       saveResultsToSession(newLeads, keyword, location, industry);
-
-      // Jo leads abhi return huin unhe seen mark karo (next search pe exclude hongi)
-      if (email && newLeads.length > 0) {
-        markLeadsAsSeen(email, keyword, location, newLeads.map(l => l.placeId));
-      }
 
       await fetchUser();
     } catch(err) {
@@ -417,6 +415,14 @@ export default function LeadSearchPage() {
                   <option value="10-50">10–50 employees</option>
                   <option value="50-200">50–200 employees</option>
                   <option value="200+">200+ employees</option>
+                </select>
+              </div>
+              <div className="filter-group">
+                <label>Results to Show</label>
+                <select value={resultsLimit} onChange={e=>setResultsLimit(Number(e.target.value))}>
+                  <option value={10}>10 results</option>
+                  <option value={20}>20 results</option>
+                  <option value={50}>50 results</option>
                 </select>
               </div>
             </div>

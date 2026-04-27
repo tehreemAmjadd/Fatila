@@ -410,6 +410,7 @@ export async function POST(req: NextRequest) {
       industry = "", location = "", keyword = "",
       email: userEmail = "",
       excludePlaceIds = [] as string[],
+      resultsLimit = 20,
     } = await req.json();
 
     if (!keyword && !industry && !location) {
@@ -434,7 +435,7 @@ export async function POST(req: NextRequest) {
     if (pool && pool.length > 0) {
       const unseen = pool.filter(l => !excludeSet.has(l.placeId));
       if (unseen.length > 0) {
-        const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
+        const toReturn = unseen.slice(0, resultsLimit);
         console.log(`Cache hit: returning ${toReturn.length}`);
         return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: pool.length, remainingUnseen: unseen.length - toReturn.length });
       }
@@ -463,7 +464,7 @@ export async function POST(req: NextRequest) {
     if (userEmail) saveLeadsToDB(allLeads, userEmail).catch(() => {});
 
     const unseen   = allLeads.filter(l => !excludeSet.has(l.placeId));
-    const toReturn = unseen.slice(0, RESULTS_PER_PAGE);
+    const toReturn = unseen.slice(0, resultsLimit);
 
     return NextResponse.json({
       leads: toReturn, total: toReturn.length,
