@@ -136,7 +136,7 @@ export default function CallsPage() {
       const lead = selectedWaLeads[i];
       if (!lead.phone) continue;
       const msg = waMessage.replace(/{{company}}/g, lead.company);
-      const cleaned = lead.phone.replace(/\D/g,"");
+      const cleaned = cleanPhone(lead.phone);
       const wa = `https://wa.me/${cleaned}?text=${encodeURIComponent(msg)}`;
       window.open(wa,"_blank");
       setWaSentCount(i+1);
@@ -152,6 +152,14 @@ export default function CallsPage() {
   const canAccess     = isAdmin || (effectivePlan!=="free" && effectivePlan!=="expired");
 
   const fmtDate = (d:string) => { try{return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}catch{return "";} };
+
+  // Fix phone: if starts with 0 (local PK number), replace with 92
+  const cleanPhone = (phone: string | null | undefined): string => {
+    if (!phone) return "";
+    const digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("0")) return "92" + digits.slice(1);
+    return digits;
+  };
   const filtered = savedLeads.filter(l => l.company.toLowerCase().includes(search.toLowerCase()) || l.phone?.includes(search));
 
   return (
@@ -290,7 +298,7 @@ export default function CallsPage() {
                                   {!bulkWaMode&&(
                                     <div className="action-btns">
                                       <a href={`tel:${lead.phone}`} className="call-btn"><PhoneCall size={13}/>Call</a>
-                                      <a href={`https://wa.me/${lead.phone?.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" className="wa-btn">
+                                      <a href={`https://wa.me/${cleanPhone(lead.phone)}`} target="_blank" rel="noreferrer" className="wa-btn">
                                         <MessageSquare size={13}/>WhatsApp
                                       </a>
                                       <button className="log-btn" onClick={()=>{setCallModal(lead);setCallStatus("connected");setCallNotes("");}}>
@@ -416,7 +424,7 @@ export default function CallsPage() {
                 <label>Quick Actions</label>
                 <div className="quick-actions">
                   <a href={`tel:${callModal.phone}`} className="quick-call-btn"><PhoneCall size={14}/>Call Now</a>
-                  <a href={`https://wa.me/${callModal.phone?.replace(/\D/g,"")}`} target="_blank" rel="noreferrer" className="quick-wa-btn">
+                  <a href={`https://wa.me/${cleanPhone(callModal.phone)}`} target="_blank" rel="noreferrer" className="quick-wa-btn">
                     <MessageSquare size={14}/>WhatsApp
                   </a>
                   {callModal.email&&<a href={`mailto:${callModal.email}`} className="quick-email-btn"><Mail size={14}/>Email</a>}
@@ -612,16 +620,16 @@ export default function CallsPage() {
 
         /* Modal */
         .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:2000;}
-        .modal-box{background:#06102a;border:1px solid rgba(0,255,153,.15);border-radius:18px;width:480px;max-width:92%;overflow:hidden;}
+        .modal-box{background:#06102a;border:1px solid rgba(0,255,153,.15);border-radius:18px;width:480px;max-width:92%;overflow:hidden;max-height:90vh;display:flex;flex-direction:column;}
         .wa-modal{max-width:520px;}
-        .modal-head{padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:flex-start;}
+        .modal-head{padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;align-items:flex-start;flex-shrink:0;}
         .modal-head h3{font-size:16px;font-weight:600;}
         .modal-head p{font-size:12px;color:#8899bb;margin-top:3px;}
         .modal-head button{background:none;border:none;color:#8899bb;cursor:pointer;}
-        .modal-body{padding:18px 22px;display:flex;flex-direction:column;gap:14px;}
+        .modal-body{padding:18px 22px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;flex:1;}
         .field-group{display:flex;flex-direction:column;gap:7px;}
         .field-group label{font-size:11px;color:#8899bb;text-transform:uppercase;letter-spacing:.5px;font-weight:600;}
-        .field-group textarea{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:white;padding:10px 12px;border-radius:8px;font-size:13px;resize:none;font-family:'Inter',sans-serif;}
+        .field-group textarea{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:white;padding:10px 12px;border-radius:8px;font-size:13px;resize:vertical;font-family:'Inter',sans-serif;min-height:80px;max-height:180px;overflow-y:auto;}
         .field-group textarea:focus{outline:none;border-color:rgba(0,255,153,.4);}
         .status-options{display:flex;gap:7px;flex-wrap:wrap;}
         .status-opt{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:#8899bb;padding:7px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;transition:.2s;}
