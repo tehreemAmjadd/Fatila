@@ -114,7 +114,7 @@ async function fetchJSearchJobs(keywords: string, location: string, count: numbe
   if (!JSEARCH_API_KEY) return [];
   try {
     const query = `${keywords} in ${location}`;
-    const url   = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query)}&page=1&num_pages=1&date_posted=all`;
+    const url   = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query)}&page=1&num_pages=1&date_posted=all&num_pages=2`;
 
     console.log("JSearch fetch:", query);
     const res = await fetch(url, {
@@ -323,7 +323,7 @@ function formatPostedDate(date: Date): string {
 // ─── POST Handler ─────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
-    const { prompt, email, plan = "free" } = await req.json();
+    const { prompt, email, plan = "free", numResults = 10 } = await req.json();
 
     if (!prompt?.trim()) {
       return NextResponse.json({ error: "Please provide a job search prompt.", jobs: [] }, { status: 400 });
@@ -362,7 +362,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const countToFetch = isUnlimited ? 10 : Math.min(10, planLimit - jobResultsUsed);
+    const count = Math.min(Number(numResults) || 10, 50);
+    const countToFetch = isUnlimited ? count : Math.min(count, planLimit - jobResultsUsed);
 
     // ── Parse prompt ──────────────────────────────────────────────────────────
     const { keywords, location, country, countryName } = await parsePrompt(prompt.trim());

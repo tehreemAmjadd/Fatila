@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useUser } from "@clerk/nextjs";
 import {
   Search, Bookmark, Trash2, ExternalLink, Globe, Lock,
-  ChevronLeft, ChevronRight, Star, Filter, Download,Phone
+  ChevronLeft, ChevronRight, Star, Filter, Download, Phone,
+  Briefcase, Clock, MapPin, Building2,
 } from "lucide-react";
 
 // ─── Plan config ──────────────────────────────────────────────────────────────
@@ -38,6 +39,21 @@ interface Lead {
   createdAt: string;
 }
 
+interface SavedJob {
+  id: string;
+  jobId: string;
+  title: string;
+  company: string;
+  location: string;
+  type: string;
+  postedAt: string;
+  description: string;
+  applyUrl: string;
+  source: string;
+  salary?: string;
+  createdAt: string;
+}
+
 export default function SavedLeadsPage() {
   const { user } = useUser();
   const [leads,          setLeads]          = useState<Lead[]>([]);
@@ -49,6 +65,10 @@ export default function SavedLeadsPage() {
   const [total,          setTotal]          = useState(0);
   const [deletingId,     setDeletingId]     = useState<string|null>(null);
   const [dbUser,         setDbUser]         = useState<any>(null);
+  const [activeTab,      setActiveTab]      = useState<"leads"|"jobs">("leads");
+  const [savedJobs,      setSavedJobs]      = useState<SavedJob[]>([]);
+  const [jobsLoading,    setJobsLoading]    = useState(false);
+  const [deletingJobId,  setDeletingJobId]  = useState<string|null>(null);
 
   const email = user?.primaryEmailAddress?.emailAddress;
 
@@ -78,6 +98,35 @@ export default function SavedLeadsPage() {
   }, [email, page, search, priorityFilter]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  // ── Fetch Saved Jobs ──────────────────────────────────────────────────────
+  const fetchSavedJobs = useCallback(async () => {
+    if (!email) return;
+    setJobsLoading(true);
+    try {
+      const res = await fetch(`/api/jobs/save?email=${encodeURIComponent(email)}`);
+      const data = await res.json();
+      setSavedJobs(data.savedJobs || []);
+    } catch(err) { console.error(err); }
+    finally { setJobsLoading(false); }
+  }, [email]);
+
+  useEffect(() => { if (activeTab === "jobs") fetchSavedJobs(); }, [activeTab, fetchSavedJobs]);
+
+  // ── Delete Saved Job ──────────────────────────────────────────────────────
+  const handleDeleteJob = async (jobId: string) => {
+    if (!confirm("Remove this job from saved?")) return;
+    setDeletingJobId(jobId);
+    try {
+      await fetch("/api/jobs/save", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, savedJobId: jobId }),
+      });
+      setSavedJobs(prev => prev.filter(j => j.id !== jobId));
+    } catch(err) { console.error(err); }
+    finally { setDeletingJobId(null); }
+  };
 
   // ── Delete ────────────────────────────────────────────────────────────────
   const handleDelete = async (leadId: string) => {
@@ -314,7 +363,7 @@ export default function SavedLeadsPage() {
             </div>
 
             {/* Export locked note for starter/trial */}
-            {!canExport && (
+            {activeTab === "leads" && !canExport && (
               <div className="export-note">
                 <Lock size={13} color="#8899bb"/>
                 <span>Export (CSV, Excel, PDF) is available on <strong>Professional</strong> and <strong>Business</strong> plans.</span>
@@ -417,6 +466,14 @@ export default function SavedLeadsPage() {
         .export-note{display:flex;align-items:center;gap:8px;background:rgba(136,153,187,.05);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:12px 16px;margin-top:14px;font-size:13px;color:#8899bb;}
         .export-note strong{color:#ccc;}
         .export-note a{color:#00ff99;margin-left:6px;}
+
+        /* Tabs */
+        .tabs-bar{display:flex;gap:8px;margin-bottom:18px;border-bottom:1px solid rgba(255,255,255,.07);padding-bottom:0;}
+        .tab-btn{display:flex;align-items:center;gap:7px;background:none;border:none;color:#8899bb;padding:10px 18px;font-size:14px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:.2s;font-family:'Inter',sans-serif;}
+        .tab-btn:hover{color:white;}
+        .tab-active{color:white!important;border-bottom-color:#00ff99!important;}
+        .tab-count{background:rgba(255,255,255,.08);color:#8899bb;padding:2px 7px;border-radius:10px;font-size:11px;}
+        .tab-active .tab-count{background:rgba(0,255,153,.12);color:#00ff99;}
 
         /* Responsive */
         @media(max-width:900px){

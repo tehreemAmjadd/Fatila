@@ -155,6 +155,9 @@ export default function LeadSearchPage() {
   const [jobError,        setJobError]         = useState("");
   const [jobResultsUsed,  setJobResultsUsed]   = useState(0);
   const [jobLimitReached, setJobLimitReached]  = useState(false);
+  const [numJobResults,   setNumJobResults]    = useState(10);
+  const [savedJobIds,     setSavedJobIds]      = useState<Set<string>>(new Set());
+  const [savingJobId,     setSavingJobId]      = useState<string|null>(null);
 
   // Plan
   const [dbUser,     setDbUser]     = useState<any>(null);
@@ -328,6 +331,7 @@ export default function LeadSearchPage() {
           prompt: jobPrompt,
           email,
           plan: isAdmin ? "admin" : effectivePlan,
+          numResults: numJobResults,
         }),
       });
 
@@ -343,7 +347,17 @@ export default function LeadSearchPage() {
       if (data.error) {
         setJobError(data.error);
       } else {
-        setJobResults(data.jobs || []);
+        // Sort by most recent first
+        const jobs: JobResult[] = (data.jobs || []).sort((a: JobResult, b: JobResult) => {
+          const order = ["Today","Yesterday","1 week ago"];
+          const ai = order.indexOf(a.postedAt); const bi = order.indexOf(b.postedAt);
+          if (ai !== -1 && bi !== -1) return ai - bi;
+          if (ai !== -1) return -1; if (bi !== -1) return 1;
+          // parse "X days ago"
+          const da = parseInt(a.postedAt) || 999; const db2 = parseInt(b.postedAt) || 999;
+          return da - db2;
+        });
+        setJobResults(jobs);
         if (isJobSearchLimited) {
           setJobResultsUsed(data.jobResultsUsed ?? 0);
           setJobLimitReached(data.limitReached ?? false);
@@ -355,6 +369,21 @@ export default function LeadSearchPage() {
     } finally {
       setJobLoading(false);
     }
+  };
+
+  // ── Save Job ──────────────────────────────────────────────────────────────
+  const handleSaveJob = async (job: JobResult) => {
+    if (!email) return;
+    setSavingJobId(job.id);
+    try {
+      await fetch("/api/jobs/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, job }),
+      });
+      setSavedJobIds(prev => new Set([...prev, job.id]));
+    } catch(err) { console.error(err); }
+    finally { setSavingJobId(null); }
   };
 
   // ── Save lead ─────────────────────────────────────────────────────────────
@@ -732,6 +761,16 @@ export default function LeadSearchPage() {
                         placeholder='e.g. "Software developer jobs in Lahore Pakistan", "React developer Karachi"'
                       />
                     </div>
+                    <select
+                      value={numJobResults}
+                      onChange={e => setNumJobResults(Number(e.target.value))}
+                      style={{background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.12)",color:"white",padding:"10px 12px",borderRadius:"10px",fontSize:"13px",cursor:"pointer",outline:"none",minWidth:"120px"}}
+                    >
+                      <option value={5}>5 results</option>
+                      <option value={10}>10 results</option>
+                      <option value={20}>20 results</option>
+                      <option value={50}>50 results</option>
+                    </select>
                     <button className="job-search-btn" onClick={handleJobSearch} disabled={jobLoading || !jobPrompt.trim()}>
                       {jobLoading
                         ? <><RefreshCw size={14} className="spin"/>Searching...</>
@@ -792,20 +831,38 @@ export default function LeadSearchPage() {
                                 </div>
                               </div>
                             </div>
-                            <a
-                              href={job.applyUrl && job.applyUrl !== "#" ? job.applyUrl : undefined}
-                              onClick={job.applyUrl && job.applyUrl !== "#"
-                                ? (e) => { e.preventDefault(); window.open(job.applyUrl, "_blank", "noopener,noreferrer"); }
-                                : undefined
-                              }
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`job-apply-btn ${!job.applyUrl || job.applyUrl === "#" ? "btn-disabled" : ""}`}
-                              style={!job.applyUrl || job.applyUrl === "#" ? {opacity:0.4, cursor:"not-allowed"} : {}}
-                              title={`Apply on ${job.source}`}
-                            >
-                              Apply on {job.source} <ChevronRight size={14}/>
-                            </a>
+                            <div style={{display:"flex",flexDirection:"column",gap:"8px",alignItems:"flex-end",flexShrink:0}}>
+                              <a
+                                href={job.applyUrl && job.applyUrl !== "#" ? job.applyUrl : undefined}
+                                onClick={job.applyUrl && job.applyUrl !== "#"
+                                  ? (e) => { e.preventDefault(); window.open(job.applyUrl, "_blank", "noopener,noreferrer"); }
+                                  : undefined
+                                }
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`job-apply-btn ${!job.applyUrl || job.applyUrl === "#" ? "btn-disabled" : ""}`}
+                                style={!job.applyUrl || job.applyUrl === "#" ? {opacity:0.4, cursor:"not-allowed"} : {}}
+                                title={`Apply on ${job.source}`}
+                              >
+                                Apply on {job.source} <ChevronRight size={14}/>
+                              </a>
+                              <button
+                                onClick={() => handleSaveJob(job)}
+                                disabled={savedJobIds.has(job.id) || savingJobId === job.id}
+                                style={{
+                                  display:"flex",alignItems:"center",gap:"6px",
+                                  background: savedJobIds.has(job.id) ? "rgba(0,255,153,.12)" : "rgba(255,255,255,.05)",
+                                  border: savedJobIds.has(job.id) ? "1px solid rgba(0,255,153,.3)" : "1px solid rgba(255,255,255,.1)",
+                                  color: savedJobIds.has(job.id) ? "#00ff99" : "#8899bb",
+                                  padding:"7px 14px",borderRadius:"8px",fontSize:"12px",
+                                  cursor: savedJobIds.has(job.id) ? "default" : "pointer",
+                                  transition:".2s",whiteSpace:"nowrap",
+                                }}
+                              >
+                                <Bookmark size={12}/>
+                                {savingJobId === job.id ? "Saving..." : savedJobIds.has(job.id) ? "Saved" : "Save Job"}
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>

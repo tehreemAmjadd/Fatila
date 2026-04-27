@@ -30,6 +30,7 @@ model User {
   callLogs  CallLog[]
   jobResultsUsed  Int  @default(0)
   jobResultsResetAt DateTime?   // ← YEH NEW HAI
+   savedJobs   SavedJob[]
 
 }
 
@@ -129,4 +130,24 @@ model Feedback {
   category  String
   message   String
   createdAt DateTime @default(now())
+}
+
+model SavedJob {
+  id          String   @id @default(cuid())
+  userId      String
+  jobId       String
+  title       String
+  company     String
+  location    String   @default("")
+  type        String   @default("")
+  postedAt    String   @default("")
+  description String   @default("") @db.Text
+  applyUrl    String   @default("#")
+  source      String   @default("")
+  salary      String?
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, jobId])
 }
