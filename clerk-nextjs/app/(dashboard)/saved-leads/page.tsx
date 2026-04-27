@@ -198,8 +198,8 @@ export default function SavedLeadsPage() {
             {/* Header */}
             <div className="page-header">
               <div>
-                <h1>Saved Leads</h1>
-                <p>{total} leads in your database</p>
+                <h1>Saved Leads & Jobs</h1>
+                <p>{total} leads · {savedJobs.length} jobs saved</p>
               </div>
               <div className="header-actions">
                 {/* Export buttons — locked for starter/trial */}
@@ -226,6 +226,18 @@ export default function SavedLeadsPage() {
               </div>
             </div>
 
+            {/* ── TABS ── */}
+            <div className="tabs-bar">
+              <button className={`tab-btn ${activeTab==="leads"?"tab-active":""}`} onClick={()=>setActiveTab("leads")}>
+                <Bookmark size={14}/>Saved Leads <span className="tab-count">{total}</span>
+              </button>
+              <button className={`tab-btn ${activeTab==="jobs"?"tab-active":""}`} onClick={()=>setActiveTab("jobs")}>
+                <Briefcase size={14}/>Saved Jobs <span className="tab-count">{savedJobs.length}</span>
+              </button>
+            </div>
+
+            {/* ── LEADS TAB ── */}
+            {activeTab === "leads" && (<>
             {/* Filters */}
             <div className="filter-bar">
               <div className="search-wrap">
@@ -363,6 +375,77 @@ export default function SavedLeadsPage() {
             </div>
 
             {/* Export locked note for starter/trial */}
+            </>)}
+
+            {/* ── JOBS TAB ── */}
+            {activeTab === "jobs" && (
+              <div className="table-container" style={{marginTop:"16px"}}>
+                {jobsLoading ? (
+                  <div className="loading-state">
+                    {[...Array(4)].map((_,i)=><div key={i} className="skeleton-row"/>)}
+                  </div>
+                ) : savedJobs.length === 0 ? (
+                  <div className="empty-state">
+                    <Briefcase size={44} color="#8899bb" strokeWidth={1.2}/>
+                    <h3>No saved jobs yet</h3>
+                    <p>Search for jobs and save them to track your applications.</p>
+                    <a href="/lead-search" className="empty-cta"><Search size={14}/>Search Jobs</a>
+                  </div>
+                ) : (
+                  <div className="table-wrapper">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Job Title</th>
+                          <th>Company</th>
+                          <th>Location</th>
+                          <th>Type</th>
+                          <th>Salary</th>
+                          <th>Posted</th>
+                          <th>Source</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {savedJobs.map(job => (
+                          <tr key={job.id}>
+                            <td>
+                              <div style={{fontWeight:500,fontSize:"13px"}}>{job.title}</div>
+                              <div style={{fontSize:"11px",color:"#8899bb",marginTop:"2px",maxWidth:"220px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{job.description}</div>
+                            </td>
+                            <td>
+                              <div className="company-cell">
+                                <div className="company-avatar" style={{background:"linear-gradient(135deg,#3b9eff,#0055cc)"}}>{job.company.charAt(0).toUpperCase()}</div>
+                                <span className="company-name">{job.company}</span>
+                              </div>
+                            </td>
+                            <td><span style={{fontSize:"12px",color:"#8899bb"}}>{job.location||"—"}</span></td>
+                            <td>{job.type && <span className="tag">{job.type}</span>}</td>
+                            <td><span style={{fontSize:"12px",color:"#00ff99",fontWeight:500}}>{job.salary||"—"}</span></td>
+                            <td><span style={{fontSize:"12px",color:"#8899bb"}}>{job.postedAt}</span></td>
+                            <td><span style={{fontSize:"12px",color:"#8899bb"}}>via {job.source}</span></td>
+                            <td>
+                              <div style={{display:"flex",gap:"6px",alignItems:"center"}}>
+                                {job.applyUrl && job.applyUrl !== "#" && (
+                                  <a href={job.applyUrl} target="_blank" rel="noopener noreferrer"
+                                    style={{display:"flex",alignItems:"center",gap:"4px",background:"rgba(59,158,255,.12)",border:"1px solid rgba(59,158,255,.25)",color:"#3b9eff",padding:"5px 10px",borderRadius:"7px",fontSize:"12px",textDecoration:"none",whiteSpace:"nowrap"}}>
+                                    Apply <ExternalLink size={11}/>
+                                  </a>
+                                )}
+                                <button className="delete-btn" onClick={()=>handleDeleteJob(job.id)} disabled={deletingJobId===job.id}>
+                                  {deletingJobId===job.id ? <span className="spinner"/> : <Trash2 size={14}/>}
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
             {activeTab === "leads" && !canExport && (
               <div className="export-note">
                 <Lock size={13} color="#8899bb"/>
