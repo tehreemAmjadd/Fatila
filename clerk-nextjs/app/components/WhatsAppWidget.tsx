@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const WHATSAPP_NUMBER = "923132600524"; // ← apna number yahan daalo
+const WHATSAPP_NUMBER = "966591060661"; // ← apna number yahan daalo
 const WHATSAPP_MESSAGE = "Hello! I need to speak with a human agent from Fatila AI.";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
