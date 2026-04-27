@@ -1,6 +1,6 @@
 // app/api/jobs/search/route.ts
-// Uses Adzuna API for REAL job listings with direct apply URLs.
-// OpenAI is used only to parse the user prompt → extract keywords + country.
+// Uses JSearch API (RapidAPI) for REAL job listings worldwide including Pakistan.
+// OpenAI is used only to parse the user prompt → extract keywords + location.
 //
 // Plan limits:
 //   trial    → 20 total results (lifetime)
@@ -9,17 +9,14 @@
 //   business / admin → unlimited
 //
 // ⚠️  Add to .env:
-//   ADZUNA_APP_ID=8e1c8f20
-//   ADZUNA_APP_KEY=b02f5d06fc5222b5ad90564f5f8566b6
-//
-// ⚠️  Prisma User model needs:
-//   jobResultsUsed    Int       @default(0)
-//   jobResultsResetAt DateTime?
+//   JSEARCH_API_KEY=your_rapidapi_key_here
+//   OPENAI_API_KEY=your_openai_key (optional, for better prompt parsing)
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
 const OPENAI_API_KEY  = process.env.OPENAI_API_KEY  || "";
+const JSEARCH_API_KEY = process.env.JSEARCH_API_KEY || "";
 const ADZUNA_APP_ID   = process.env.ADZUNA_APP_ID   || "8e1c8f20";
 const ADZUNA_APP_KEY  = process.env.ADZUNA_APP_KEY  || "b02f5d06fc5222b5ad90564f5f8566b6";
 
@@ -31,39 +28,12 @@ const PLAN_JOB_LIMITS: Record<string, number> = {
   business: Infinity,
 };
 
-// ─── Adzuna country codes ─────────────────────────────────────────────────────
-// Maps common country names/keywords → Adzuna country code
-const COUNTRY_MAP: Record<string, string> = {
-  // English-speaking
-  "us": "us", "usa": "us", "united states": "us", "america": "us",
-  "uk": "gb", "united kingdom": "gb", "england": "gb", "britain": "gb", "london": "gb",
-  "canada": "ca", "toronto": "ca", "vancouver": "ca",
-  "australia": "au", "sydney": "au", "melbourne": "au",
-  "new zealand": "nz",
-  "south africa": "za",
-  // Europe
-  "germany": "de", "berlin": "de", "munich": "de",
-  "france": "fr", "paris": "fr",
-  "netherlands": "nl", "amsterdam": "nl",
-  "poland": "pl",
-  "russia": "ru",
-  "brazil": "br",
-  "india": "in", "bangalore": "in", "mumbai": "in", "delhi": "in", "hyderabad": "in",
-  "singapore": "sg",
-  // Middle East & Pakistan — Adzuna unsupported, will use OpenAI fallback
-  "dubai": "ae", "uae": "ae", "abu dhabi": "ae", "sharjah": "ae",
-  "saudi": "sa", "saudi arabia": "sa", "riyadh": "sa", "jeddah": "sa",
-  "pakistan": "pk", "lahore": "pk", "karachi": "pk", "islamabad": "pk", "rawalpindi": "pk",
-  "qatar": "qa", "doha": "qa",
-  "kuwait": "kw",
-  "egypt": "eg", "cairo": "eg",
-};
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ParsedQuery {
   keywords: string;
-  country: string;   // Adzuna country code e.g. "us", "gb"
-  location: string;  // Human-readable location for display
+  location: string;    // city + country for display and search
+  country:  string;    // adzuna country code (fallback)
+  countryName: string; // full country name
 }
 
 interface JobResult {
@@ -81,11 +51,9 @@ interface JobResult {
 
 // ─── Step 1: Parse user prompt with OpenAI ────────────────────────────────────
 async function parsePrompt(prompt: string): Promise<ParsedQuery> {
-  // Simple fallback if no OpenAI key
   if (!OPENAI_API_KEY) {
-    return { keywords: prompt, country: "us", location: "Global" };
+    return { keywords: prompt, location: prompt, country: "us", countryName: "united states" };
   }
-
   try {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -96,140 +64,255 @@ async function parsePrompt(prompt: string): Promise<ParsedQuery> {
         temperature: 0,
         messages: [{
           role: "user",
-          content: `Extract job search info from this prompt: "${prompt}"
+          content: `Extract job search info from: "${prompt}"
 
-Reply ONLY with valid JSON, no explanation:
+Reply ONLY valid JSON:
 {
-  "keywords": "job title and skills only (e.g. React Developer, Python Engineer)",
-  "country": "full country name in lowercase (e.g. united states, united kingdom, pakistan, india, australia)",
-  "location": "city and country for display (e.g. Dubai, UAE or London, UK or Lahore, Pakistan)"
+  "keywords": "job title only (e.g. Software Developer, React Developer)",
+  "location": "city and country (e.g. Lahore, Pakistan or New York, United States)",
+  "countryName": "country name lowercase (e.g. pakistan, united states, india)"
 }
 
-If no country mentioned, use "united states".`,
+If no country, default to "united states".`,
         }],
       }),
     });
-
-    const data  = await res.json();
-    const raw   = data.choices?.[0]?.message?.content?.trim() || "{}";
-    const clean = raw.replace(/```json|```/g, "").trim();
+    const data   = await res.json();
+    const raw    = data.choices?.[0]?.message?.content?.trim() || "{}";
+    const clean  = raw.replace(/\`\`\`json|\`\`\`/g, "").trim();
     const parsed = JSON.parse(clean);
 
-    // Map country name → Adzuna code
-    const countryLower = (parsed.country || "united states").toLowerCase();
-    let countryCode = "us"; // default
+    // Map to adzuna country code (for fallback)
+    const COUNTRY_MAP: Record<string, string> = {
+      "us": "us", "usa": "us", "united states": "us", "america": "us",
+      "uk": "gb", "united kingdom": "gb", "england": "gb", "britain": "gb",
+      "canada": "ca", "australia": "au", "new zealand": "nz", "south africa": "za",
+      "germany": "de", "france": "fr", "netherlands": "nl", "india": "in",
+      "singapore": "sg", "brazil": "br", "pakistan": "pk",
+      "uae": "ae", "united arab emirates": "ae", "saudi arabia": "sa",
+    };
+    const cn = (parsed.countryName || "united states").toLowerCase();
+    let countryCode = "us";
     for (const [key, code] of Object.entries(COUNTRY_MAP)) {
-      if (countryLower.includes(key)) { countryCode = code; break; }
+      if (cn.includes(key)) { countryCode = code; break; }
     }
 
     return {
-      keywords: parsed.keywords || prompt,
-      country:  countryCode,
-      location: parsed.location || parsed.country || "Global",
+      keywords:    parsed.keywords    || prompt,
+      location:    parsed.location    || prompt,
+      country:     countryCode,
+      countryName: parsed.countryName || "united states",
     };
   } catch (e) {
-    console.error("OpenAI parse failed, using fallback:", e);
-    return { keywords: prompt, country: "us", location: "Global" };
+    console.error("OpenAI parse failed:", e);
+    return { keywords: prompt, location: prompt, country: "us", countryName: "united states" };
   }
 }
 
-// ─── Step 2: Fetch real jobs from Adzuna ─────────────────────────────────────
-async function fetchAdzunaJobs(keywords: string, country: string, count: number): Promise<JobResult[]> {
+// ─── Step 2a: JSearch API (RapidAPI) — works worldwide including Pakistan ─────
+async function fetchJSearchJobs(keywords: string, location: string, count: number): Promise<JobResult[]> {
+  if (!JSEARCH_API_KEY) return [];
   try {
-    const params = new URLSearchParams({
-      app_id:          ADZUNA_APP_ID,
-      app_key:         ADZUNA_APP_KEY,
-      results_per_page: String(Math.min(count, 10)),
-      what:            keywords,
-      content_type:    "application/json",
+    const query = `${keywords} in ${location}`;
+    const url   = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query)}&page=1&num_pages=1&date_posted=all`;
+
+    console.log("JSearch fetch:", query);
+    const res = await fetch(url, {
+      headers: {
+        "X-RapidAPI-Key":  JSEARCH_API_KEY,
+        "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
+      },
+      cache: "no-store",
     });
 
-    const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params}`;
-    console.log("🔍 Adzuna fetch:", url);
-
-    const res  = await fetch(url, { cache: "no-store" });
-
     if (!res.ok) {
-      console.error("Adzuna error:", res.status, await res.text());
+      console.error("JSearch error:", res.status, await res.text());
       return [];
     }
 
-    const data = await res.json();
-    const results = data?.results || [];
+    const data    = await res.json();
+    const results = data?.data || [];
 
-    // Debug: log first job's URL fields to verify what Adzuna returns
-    if (results.length > 0) {
-      console.log("Adzuna job URL fields:", {
-        redirect_url: results[0]?.redirect_url,
-        adref: results[0]?.adref,
-        url: results[0]?.url,
-      });
-    }
-
-    return results.map((job: any, i: number): JobResult => {
-      // Salary formatting
-      let salary: string | undefined;
-      if (job.salary_min && job.salary_max) {
-        const min = Math.round(job.salary_min).toLocaleString();
-        const max = Math.round(job.salary_max).toLocaleString();
-        const currency = getSalaryCurrency(country);
-        salary = `${currency}${min} – ${currency}${max}/year`;
-      } else if (job.salary_min) {
-        const currency = getSalaryCurrency(country);
-        salary = `From ${currency}${Math.round(job.salary_min).toLocaleString()}/year`;
+    return results.slice(0, count).map((job: any, i: number): JobResult => {
+      // Posted date
+      let postedAt = "Recently";
+      if (job.job_posted_at_timestamp) {
+        const posted   = new Date(job.job_posted_at_timestamp * 1000);
+        const diffDays = Math.floor((Date.now() - posted.getTime()) / 86400000);
+        if (diffDays === 0)      postedAt = "Today";
+        else if (diffDays === 1) postedAt = "Yesterday";
+        else if (diffDays < 7)  postedAt = `${diffDays} days ago`;
+        else if (diffDays < 14) postedAt = "1 week ago";
+        else if (diffDays < 30) postedAt = `${Math.floor(diffDays/7)} weeks ago`;
+        else                    postedAt = `${Math.floor(diffDays/30)} months ago`;
+      } else if (job.job_posted_at_datetime_utc) {
+        const posted   = new Date(job.job_posted_at_datetime_utc);
+        const diffDays = Math.floor((Date.now() - posted.getTime()) / 86400000);
+        if (diffDays === 0)      postedAt = "Today";
+        else if (diffDays === 1) postedAt = "Yesterday";
+        else if (diffDays < 7)  postedAt = `${diffDays} days ago`;
+        else                    postedAt = `${Math.floor(diffDays/7)} weeks ago`;
       }
 
-      // Posted date
-      const postedAt = job.created
-        ? formatPostedDate(new Date(job.created))
-        : "Recently";
-
       // Job type
-      const contractType = job.contract_time || job.contract_type || "";
-      const type = contractType.includes("full") ? "Full-time"
-                 : contractType.includes("part") ? "Part-time"
-                 : contractType.includes("contract") ? "Contract"
+      const emp = (job.job_employment_type || "").toLowerCase();
+      const type = emp.includes("fulltime") || emp.includes("full_time") ? "Full-time"
+                 : emp.includes("parttime") || emp.includes("part_time") ? "Part-time"
+                 : emp.includes("contractor") || emp.includes("contract") ? "Contract"
+                 : emp.includes("intern") ? "Internship"
                  : "Full-time";
+
+      // Salary
+      let salary: string | undefined;
+      if (job.job_min_salary && job.job_max_salary) {
+        const curr = job.job_salary_currency || "$";
+        const per  = job.job_salary_period === "YEAR" ? "/year" : job.job_salary_period === "MONTH" ? "/month" : "/month";
+        salary = `${curr}${Math.round(job.job_min_salary).toLocaleString()} – ${curr}${Math.round(job.job_max_salary).toLocaleString()}${per}`;
+      }
+
+      // Source from apply link
+      const applyUrl = job.job_apply_link || job.job_google_link || "#";
+      let source = job.job_publisher || "Job Board";
+      const urlLower = applyUrl.toLowerCase();
+      if (urlLower.includes("linkedin"))    source = "LinkedIn";
+      else if (urlLower.includes("indeed")) source = "Indeed";
+      else if (urlLower.includes("rozee"))  source = "Rozee.pk";
+      else if (urlLower.includes("glassdoor")) source = "Glassdoor";
+      else if (urlLower.includes("bayt"))   source = "Bayt";
+      else if (urlLower.includes("mustakbil")) source = "Mustakbil";
+      else if (urlLower.includes("rozee"))  source = "Rozee.pk";
+      else if (urlLower.includes("workable")) source = "Workable";
+      else if (urlLower.includes("lever"))  source = "Lever";
+      else if (urlLower.includes("greenhouse")) source = "Greenhouse";
+
+      return {
+        id:          job.job_id || `jsearch_${i}_${Date.now()}`,
+        title:       job.job_title       || "Job Opening",
+        company:     job.employer_name   || "Company",
+        location:    [job.job_city, job.job_state, job.job_country].filter(Boolean).join(", ") || location,
+        type,
+        postedAt,
+        description: job.job_description
+          ? job.job_description.replace(/
++/g, " ").slice(0, 220).trim() + "..."
+          : "Click Apply to view full job description.",
+        applyUrl,
+        source,
+        salary,
+      };
+    });
+  } catch (e) {
+    console.error("JSearch fetch error:", e);
+    return [];
+  }
+}
+
+// ─── Step 2b: Adzuna (for supported countries, when JSearch unavailable) ──────
+const ADZUNA_SUPPORTED = ["us","gb","ca","au","nz","za","de","fr","nl","pl","ru","br","in","sg"];
+
+async function fetchAdzunaJobs(keywords: string, country: string, count: number): Promise<JobResult[]> {
+  if (!ADZUNA_SUPPORTED.includes(country)) return [];
+  try {
+    const params = new URLSearchParams({
+      app_id:           ADZUNA_APP_ID,
+      app_key:          ADZUNA_APP_KEY,
+      results_per_page: String(Math.min(count, 10)),
+      what:             keywords,
+      content_type:     "application/json",
+    });
+    const url  = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params}`;
+    const res  = await fetch(url, { cache: "no-store" });
+    if (!res.ok) return [];
+    const data    = await res.json();
+    const results = data?.results || [];
+
+    const CURRENCY: Record<string,string> = { us:"$",gb:"£",ca:"CA$",au:"AU$",de:"€",fr:"€",nl:"€",in:"₹",sg:"S$" };
+    const curr = CURRENCY[country] || "$";
+
+    return results.map((job: any, i: number): JobResult => {
+      let salary: string | undefined;
+      if (job.salary_min && job.salary_max) {
+        salary = `${curr}${Math.round(job.salary_min).toLocaleString()} – ${curr}${Math.round(job.salary_max).toLocaleString()}/year`;
+      }
+      const diffDays = job.created ? Math.floor((Date.now() - new Date(job.created).getTime()) / 86400000) : 99;
+      const postedAt = diffDays === 0 ? "Today" : diffDays === 1 ? "Yesterday" : diffDays < 7 ? `${diffDays} days ago` : `${Math.floor(diffDays/7)} weeks ago`;
+      const emp  = (job.contract_time || job.contract_type || "").toLowerCase();
+      const type = emp.includes("full") ? "Full-time" : emp.includes("part") ? "Part-time" : emp.includes("contract") ? "Contract" : "Full-time";
 
       return {
         id:          job.id || `adzuna_${i}_${Date.now()}`,
-        title:       job.title        || "Job Opening",
+        title:       job.title || "Job Opening",
         company:     job.company?.display_name || "Company",
         location:    job.location?.display_name || job.location?.area?.join(", ") || "N/A",
-        type,
-        postedAt,
-        description: job.description
-          ? job.description.replace(/<[^>]*>/g, "").slice(0, 200).trim() + "..."
-          : "Click Apply to view full job description.",
-        // Adzuna gives redirect_url (tracking link) — use it but also keep adref as backup
+        type, postedAt,
+        description: job.description ? job.description.replace(/<[^>]*>/g,"").slice(0,220).trim() + "..." : "Click Apply to view job.",
         applyUrl:    job.redirect_url || job.adref || job.url || "#",
         source:      "Adzuna",
         salary,
       };
     });
-
   } catch (e) {
-    console.error("Adzuna fetch error:", e);
+    console.error("Adzuna error:", e);
     return [];
   }
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Step 2c: Direct job board links fallback (no API key needed) ─────────────
+// When both JSearch and Adzuna fail, return search links to real job boards
+// This always gives real links even without API keys
+function buildDirectJobLinks(keywords: string, location: string, countryName: string, count: number): JobResult[] {
+  const kw  = encodeURIComponent(keywords);
+  const loc = encodeURIComponent(location);
+  const isPakistan = countryName.includes("pakistan");
+  const isUAE      = countryName.includes("uae") || countryName.includes("emirates");
+  const isIndia    = countryName.includes("india");
 
-function getSalaryCurrency(countryCode: string): string {
-  const map: Record<string, string> = {
-    us: "$", gb: "£", ca: "CA$", au: "AU$",
-    de: "€", fr: "€", nl: "€", pl: "zł",
-    in: "₹", br: "R$", ru: "₽", nz: "NZ$",
-    sg: "S$", za: "R",
-  };
-  return map[countryCode] || "$";
+  let boards: Array<{ name: string; url: string }> = [];
+
+  if (isPakistan) {
+    boards = [
+      { name: "Rozee.pk",    url: `https://www.rozee.pk/job/jsearch/q/${kw}` },
+      { name: "LinkedIn",    url: `https://www.linkedin.com/jobs/search/?keywords=${kw}&location=${loc}` },
+      { name: "Mustakbil",   url: `https://www.mustakbil.com/jobs/search/?q=${kw}&l=${loc}` },
+      { name: "Indeed",      url: `https://pk.indeed.com/jobs?q=${kw}&l=${loc}` },
+    ];
+  } else if (isUAE) {
+    boards = [
+      { name: "Bayt",        url: `https://www.bayt.com/en/uae/jobs/?q=${kw}` },
+      { name: "LinkedIn",    url: `https://www.linkedin.com/jobs/search/?keywords=${kw}&location=${loc}` },
+      { name: "GulfTalent",  url: `https://www.gulftalent.com/jobs?q=${kw}` },
+      { name: "Indeed UAE",  url: `https://ae.indeed.com/jobs?q=${kw}&l=${loc}` },
+    ];
+  } else if (isIndia) {
+    boards = [
+      { name: "Naukri",      url: `https://www.naukri.com/${kw.replace(/%20/g,"-")}-jobs-in-${loc.replace(/%20/g,"-").toLowerCase()}` },
+      { name: "LinkedIn",    url: `https://www.linkedin.com/jobs/search/?keywords=${kw}&location=${loc}` },
+      { name: "Indeed India",url: `https://in.indeed.com/jobs?q=${kw}&l=${loc}` },
+    ];
+  } else {
+    boards = [
+      { name: "LinkedIn",    url: `https://www.linkedin.com/jobs/search/?keywords=${kw}&location=${loc}` },
+      { name: "Indeed",      url: `https://www.indeed.com/jobs?q=${kw}&l=${loc}` },
+      { name: "Glassdoor",   url: `https://www.glassdoor.com/Job/jobs.htm?sc.keyword=${kw}&locT=C&locId=1&typedKeyword=${kw}` },
+    ];
+  }
+
+  return boards.slice(0, Math.min(count, boards.length)).map((b, i) => ({
+    id:          `direct_${i}_${Date.now()}`,
+    title:       `${keywords} — Search on ${b.name}`,
+    company:     b.name,
+    location,
+    type:        "Various",
+    postedAt:    "Live listings",
+    description: `Click Apply to search for "${keywords}" jobs in ${location} on ${b.name}. You will see all current openings with real apply links.`,
+    applyUrl:    b.url,
+    source:      b.name,
+  }));
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function formatPostedDate(date: Date): string {
-  const now   = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffDays = Math.floor((Date.now() - date.getTime()) / 86400000);
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7)  return `${diffDays} days ago`;
@@ -238,72 +321,7 @@ function formatPostedDate(date: Date): string {
   return `${Math.floor(diffDays / 30)} months ago`;
 }
 
-// ─── Adzuna-unsupported countries → use OpenAI fallback ──────────────────────
-// These countries/regions are not well covered by Adzuna
-const ADZUNA_UNSUPPORTED = ["pk", "ae", "sa", "qa", "kw", "bh", "om", "eg", "ng", "gh"];
-
-async function generateOpenAIJobs(prompt: string, location: string, count: number): Promise<JobResult[]> {
-  if (!OPENAI_API_KEY) return [];
-  const today = new Date().toISOString().split("T")[0];
-
-  const systemPrompt = `You are a job search assistant. Return exactly ${count} realistic job listings for: "${location}".
-
-Today: ${today}
-
-RULES:
-- Use real companies known in that region
-- Currency by location: Pakistan=PKR, UAE=AED, Saudi=SAR, Egypt=EGP, Nigeria=NGN, default=USD
-- For Pakistan use: Rozee.pk, Mustakbil, LinkedIn
-- For UAE/Gulf use: Bayt.com, LinkedIn, GulfTalent
-- APPLY URLS must be real search URLs on the correct job board
-  * Rozee: https://www.rozee.pk/job/jsearch/q/KEYWORDS
-  * Bayt UAE: https://www.bayt.com/en/uae/jobs/?q=KEYWORDS
-  * Bayt KSA: https://www.bayt.com/en/saudi-arabia/jobs/?q=KEYWORDS
-  * LinkedIn: https://www.linkedin.com/jobs/search/?keywords=KEYWORDS&location=LOCATION
-- postedAt: "Today","2 days ago","3 days ago","1 week ago"
-- type: "Full-time"|"Remote"|"Hybrid"|"Contract"|"Part-time"
-- description: 1-2 sentences
-
-Return ONLY a valid JSON array, no markdown.`;
-
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini", max_tokens: 2500, temperature: 0.7,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-    const data  = await res.json();
-    const raw   = data.choices?.[0]?.message?.content?.trim() || "[]";
-    const clean = raw.replace(/```json|```/g, "").trim();
-    let jobs: JobResult[] = [];
-    try { jobs = JSON.parse(clean); if (!Array.isArray(jobs)) jobs = []; } catch { jobs = []; }
-    return jobs.map((job, i) => {
-      // Make sure source matches the actual URL domain
-      let source = job.source || "LinkedIn";
-      const url = (job.applyUrl || "").toLowerCase();
-      if (url.includes("rozee.pk"))   source = "Rozee.pk";
-      else if (url.includes("bayt"))  source = "Bayt";
-      else if (url.includes("linkedin")) source = "LinkedIn";
-      else if (url.includes("indeed"))   source = "Indeed";
-      else if (url.includes("glassdoor")) source = "Glassdoor";
-      else if (url.includes("mustakbil")) source = "Mustakbil";
-      else if (url.includes("naukri"))    source = "Naukri";
-      return { ...job, id: job.id || `ai_${Date.now()}_${i}`, source };
-    });
-  } catch (e) {
-    console.error("OpenAI fallback error:", e);
-    return [];
-  }
-}
-
 // ─── POST Handler ─────────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
   try {
     const { prompt, email, plan = "free" } = await req.json();
@@ -317,26 +335,19 @@ export async function POST(req: NextRequest) {
     const planLimit      = PLAN_JOB_LIMITS[normalizedPlan] ?? 0;
     const isUnlimited    = !isFinite(planLimit) || planLimit >= 999999;
 
-    // Free / unknown — blocked
     if (planLimit === 0) {
       return NextResponse.json({ error: "Upgrade to access Job Search.", jobs: [] }, { status: 403 });
     }
 
-    // ── DB usage check for limited plans ─────────────────────────────────────
+    // ── DB usage check ────────────────────────────────────────────────────────
     let jobResultsUsed = 0;
-
     if (!isUnlimited && email) {
       const user = await db.user.findUnique({ where: { email } }).catch(() => null);
-
       if (user) {
-        // Monthly reset for starter/pro
         if (normalizedPlan !== "trial") {
           const lastReset   = (user as any).jobResultsResetAt ? new Date((user as any).jobResultsResetAt) : null;
           const now         = new Date();
-          const shouldReset = !lastReset ||
-            now.getFullYear() > lastReset.getFullYear() ||
-            now.getMonth()    > lastReset.getMonth();
-
+          const shouldReset = !lastReset || now.getFullYear() > lastReset.getFullYear() || now.getMonth() > lastReset.getMonth();
           if (shouldReset) {
             await db.user.update({ where: { email }, data: { jobResultsUsed: 0, jobResultsResetAt: now } as any }).catch(() => {});
             jobResultsUsed = 0;
@@ -346,7 +357,6 @@ export async function POST(req: NextRequest) {
         } else {
           jobResultsUsed = (user as any).jobResultsUsed ?? 0;
         }
-
         if (jobResultsUsed >= planLimit) {
           return NextResponse.json({ jobs: [], total: 0, jobResultsUsed, jobResultsLimit: planLimit, limitReached: true }, { status: 403 });
         }
@@ -355,26 +365,32 @@ export async function POST(req: NextRequest) {
 
     const countToFetch = isUnlimited ? 10 : Math.min(10, planLimit - jobResultsUsed);
 
-    // ── Parse prompt → extract keywords + country ─────────────────────────────
-    const { keywords, country, location } = await parsePrompt(prompt.trim());
-    console.log(`🔍 Parsed | keywords:"${keywords}" | country:"${country}" | location:"${location}"`);
+    // ── Parse prompt ──────────────────────────────────────────────────────────
+    const { keywords, location, country, countryName } = await parsePrompt(prompt.trim());
+    console.log(`Parsed | keywords:"${keywords}" | location:"${location}" | country:"${country}"`);
 
-    // ── Fetch jobs: Adzuna for supported countries, OpenAI fallback for rest ────
+    // ── Fetch jobs: JSearch → Adzuna → Direct links ───────────────────────────
     let jobs: JobResult[] = [];
 
-    if (ADZUNA_UNSUPPORTED.includes(country)) {
-      // Pakistan, UAE, Saudi etc. — use OpenAI with real job board links
-      console.log(`🌍 Country "${country}" not on Adzuna — using OpenAI fallback`);
-      jobs = await generateOpenAIJobs(prompt.trim(), location, countToFetch);
-    } else {
-      jobs = await fetchAdzunaJobs(keywords, country, countToFetch);
-      // If Adzuna returns nothing, fallback to OpenAI
-      if (jobs.length === 0) {
-        console.log(`⚠️ Adzuna returned 0 results — using OpenAI fallback`);
-        jobs = await generateOpenAIJobs(prompt.trim(), location, countToFetch);
-      }
+    // 1. Try JSearch (works for Pakistan, India, UAE, everywhere)
+    if (JSEARCH_API_KEY) {
+      jobs = await fetchJSearchJobs(keywords, location, countToFetch);
+      console.log(`JSearch returned: ${jobs.length} jobs`);
     }
-    console.log(`✅ Final job count: ${jobs.length}`);
+
+    // 2. Fallback: Adzuna (US, UK, India etc.)
+    if (jobs.length === 0) {
+      jobs = await fetchAdzunaJobs(keywords, country, countToFetch);
+      console.log(`Adzuna returned: ${jobs.length} jobs`);
+    }
+
+    // 3. Last resort: direct job board search links (always real, never fake)
+    if (jobs.length === 0) {
+      jobs = buildDirectJobLinks(keywords, location, countryName, countToFetch);
+      console.log(`Using direct job board links: ${jobs.length}`);
+    }
+
+    console.log(`Final job count: ${jobs.length}`);
 
     // ── Increment DB usage ────────────────────────────────────────────────────
     if (!isUnlimited && email && jobs.length > 0) {
@@ -387,11 +403,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       jobs,
-      total:           jobs.length,
+      total:            jobs.length,
       searchedLocation: location,
-      jobResultsUsed:  isUnlimited ? null : jobResultsUsed,
-      jobResultsLimit: isUnlimited ? null : planLimit,
-      limitReached:    !isUnlimited && jobResultsUsed >= planLimit,
+      jobResultsUsed:   isUnlimited ? null : jobResultsUsed,
+      jobResultsLimit:  isUnlimited ? null : planLimit,
+      limitReached:     !isUnlimited && jobResultsUsed >= planLimit,
     });
 
   } catch (error: any) {

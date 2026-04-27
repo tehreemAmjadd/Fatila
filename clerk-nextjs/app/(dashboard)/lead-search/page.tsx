@@ -681,8 +681,7 @@ export default function LeadSearchPage() {
                   <span className="job-ai-badge"><Bot size={10}/>AI-Powered</span>
                   <span className="job-paid-badge"><Lock size={9}/>Paid Feature</span>
                 </h2>
-                <p>Describe the job you're looking for — get current listings with direct apply links</p>
-                <p className="job-dev-notice">⚠️ Under Development — May provide incorrect results</p>
+                <p>Type the job role and location — get real listings from LinkedIn, Rozee.pk, Indeed & more</p>
               </div>
             </div>
           </div>
@@ -730,7 +729,7 @@ export default function LeadSearchPage() {
                         value={jobPrompt}
                         onChange={e => setJobPrompt(e.target.value)}
                         onKeyDown={e => e.key === "Enter" && handleJobSearch()}
-                        placeholder='e.g. "React developer jobs in Lahore", "Remote Python engineer Pakistan"'
+                        placeholder='e.g. "Software developer jobs in Lahore Pakistan", "React developer Karachi"'
                       />
                     </div>
                     <button className="job-search-btn" onClick={handleJobSearch} disabled={jobLoading || !jobPrompt.trim()}>
@@ -803,8 +802,9 @@ export default function LeadSearchPage() {
                               rel="noopener noreferrer"
                               className={`job-apply-btn ${!job.applyUrl || job.applyUrl === "#" ? "btn-disabled" : ""}`}
                               style={!job.applyUrl || job.applyUrl === "#" ? {opacity:0.4, cursor:"not-allowed"} : {}}
+                              title={`Apply on ${job.source}`}
                             >
-                              Apply <ChevronRight size={14}/>
+                              Apply on {job.source} <ChevronRight size={14}/>
                             </a>
                           </div>
                         ))}
