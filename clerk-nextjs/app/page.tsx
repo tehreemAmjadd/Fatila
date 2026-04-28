@@ -88,10 +88,10 @@ export default function HomePage() {
       const progress = Math.min(elapsed / duration, 1);
       const ease = 1 - Math.pow(1 - progress, 3);
       setCounts({
-        leads: Math.floor(ease * targets.leads),
-        companies: Math.floor(ease * targets.companies),
+        leads:      Math.floor(ease * targets.leads),
+        companies:  Math.floor(ease * targets.companies),
         industries: Math.floor(ease * targets.industries),
-        countries: Math.floor(ease * targets.countries),
+        countries:  Math.floor(ease * targets.countries),
       });
       if (progress < 1) requestAnimationFrame(tick);
     };
@@ -144,29 +144,29 @@ export default function HomePage() {
 
   /* ── Features ── */
   const features = [
-    { Icon: Search, title: "Smart Lead Discovery", desc: "Find exactly the right businesses in any city — by industry, keyword, or location. Results in seconds, not hours.", badge: "Most Used" },
-    { Icon: MapPin, title: "Google Business Leads", desc: "Get verified phone numbers, emails, addresses and ratings directly from Google — ready to call or email instantly.", badge: "" },
-    { Icon: Brain, title: "AI Lead Scoring", desc: "Every lead is scored 0–100 automatically. Know which businesses to contact first — stop wasting time on cold leads.", badge: "AI Powered" },
-    { Icon: Zap, title: "Automation Workflows", desc: "Save 10+ hours per week. AI handles prospecting so you can focus entirely on closing deals.", badge: "" },
-    { Icon: Activity, title: "Real-Time Data", desc: "Live data delivery — no stale lists. Every search returns fresh, verified contacts from current sources.", badge: "" },
-    { Icon: FileDown, title: "Export to CRM", desc: "Download to CSV, Excel, or PDF. Push directly to your CRM — zero manual copy-paste, ever.", badge: "" },
+    { Icon: Search,   title: "Smart Lead Discovery",          desc: "Find exactly the right businesses in any city — by industry, keyword, or location. Results in seconds, not hours.",              badge: "Most Used" },
+    { Icon: MapPin,   title: "Google Business Leads",         desc: "Get verified phone numbers, emails, addresses and ratings directly from Google — ready to call or email instantly.",               badge: "" },
+    { Icon: Brain,    title: "AI Lead Scoring",               desc: "Every lead is scored 0–100 automatically. Know which businesses to contact first — stop wasting time on cold leads.",             badge: "AI Powered" },
+    { Icon: Zap,      title: "Automation Workflows",          desc: "Save 10+ hours per week. AI handles prospecting so you can focus entirely on closing deals.",                                      badge: "" },
+    { Icon: Activity, title: "Real-Time Data",                desc: "Live data delivery — no stale lists. Every search returns fresh, verified contacts from current sources.",                         badge: "" },
+    { Icon: FileDown, title: "Export to CRM",                 desc: "Download to CSV, Excel, or PDF. Push directly to your CRM — zero manual copy-paste, ever.",                                       badge: "" },
   ];
 
   /* ── Steps ── */
   const steps = [
-    { Icon: Target, num: "01", title: "Define Your Target", desc: "Type your industry, city, and keywords. Takes 10 seconds." },
-    { Icon: Cpu, num: "02", title: "AI Scans & Scores", desc: "Our engine crawls Google listings and scores every lead 0–100." },
-    { Icon: Database, num: "03", title: "Get 60 Leads Instantly", desc: "Receive enriched, verified contacts — names, phones, emails — ready for outreach." },
+    { Icon: Target,   num: "01", title: "Define Your Target",    desc: "Type your industry, city, and keywords. Takes 10 seconds." },
+    { Icon: Cpu,      num: "02", title: "AI Scans & Scores",     desc: "Our engine crawls Google listings and scores every lead 0–100." },
+    { Icon: Database, num: "03", title: "Get 60 Leads Instantly",desc: "Receive enriched, verified contacts — names, phones, emails — ready for outreach." },
   ];
 
   /* ── Testimonials ── */
   const testimonials = [
-    { name: "Ahmed Al-Rashidi", role: "Sales Director", location: "Riyadh, Saudi Arabia", text: "I found 47 qualified restaurant leads in Riyadh in under 5 minutes. Closed 3 clients that same week. Nothing comes close at this price.", stars: 5 },
-    { name: "Muhammad Tariq", role: "Agency Owner", location: "Lahore, Pakistan", text: "We used to spend 2 hours manually searching for leads. Fatila AI does it in 60 seconds with AI scoring. Our team's productivity doubled.", stars: 5 },
-    { name: "Sarah K.", role: "B2B Consultant", location: "United States", text: "I compared this to Apollo.io and Hunter. For MENA and Pakistan markets, Fatila AI is unmatched. The Google Places integration is incredibly accurate.", stars: 5 },
-    { name: "Omar Khalil", role: "Startup Founder", location: "Amman, Jordan", text: "The AI lead scoring alone is worth the subscription. I now call only the top 10 leads the AI ranks highest. My close rate tripled.", stars: 5 },
-    { name: "Fatima Malik", role: "Marketing Manager", location: "Karachi, Pakistan", text: "Setup took 2 minutes. I ran my first search and had 60 leads with phone numbers and ratings. No other tool gives this speed for Pakistan market.", stars: 5 },
-    { name: "James Chen", role: "Sales Manager", location: "New York, USA", text: "Switched from a $300/month tool to Fatila AI at $12/month. Same quality leads, better AI scoring. Best decision this year.", stars: 5 },
+    { name: "Ahmed Al-Rashidi",  role: "Sales Director",       location: "Riyadh, Saudi Arabia", text: "I found 47 qualified restaurant leads in Riyadh in under 5 minutes. Closed 3 clients that same week. Nothing comes close at this price.", stars: 5 },
+    { name: "Muhammad Tariq",    role: "Agency Owner",          location: "Lahore, Pakistan",      text: "We used to spend 2 hours manually searching for leads. Fatila AI does it in 60 seconds with AI scoring. Our team's productivity doubled.", stars: 5 },
+    { name: "Sarah K.",          role: "B2B Consultant",        location: "United States",         text: "I compared this to Apollo.io and Hunter. For MENA and Pakistan markets, Fatila AI is unmatched. The Google Places integration is incredibly accurate.", stars: 5 },
+    { name: "Omar Khalil",       role: "Startup Founder",       location: "Amman, Jordan",         text: "The AI lead scoring alone is worth the subscription. I now call only the top 10 leads the AI ranks highest. My close rate tripled.", stars: 5 },
+    { name: "Fatima Malik",      role: "Marketing Manager",     location: "Karachi, Pakistan",     text: "Setup took 2 minutes. I ran my first search and had 60 leads with phone numbers and ratings. No other tool gives this speed for Pakistan market.", stars: 5 },
+    { name: "James Chen",        role: "Sales Manager",         location: "New York, USA",         text: "Switched from a $300/month tool to Fatila AI at $12/month. Same quality leads, better AI scoring. Best decision this year.", stars: 5 },
   ];
 
   /* ── Pricing — exact from billing page ── */
@@ -176,14 +176,14 @@ export default function HomePage() {
       monthlyUSD: 12, monthlyPKR: "3,300", popular: false,
       jobLimit: "100 results/mo",
       features: [
-        { ok: true, text: "100 leads / month" },
-        { ok: true, text: "Lead Search (Google Places)" },
-        { ok: true, text: "AI Lead Scoring & Insights" },
-        { ok: true, text: "Saved Leads (up to 100)" },
-        { ok: true, text: "Tasks & Call Logs" },
-        { ok: true, text: "AI Assistant (50 msgs/mo)" },
-        { ok: true, text: "Meta Ads Generator" },
-        { ok: true, text: "Job Search (100 results/mo)" },
+        { ok: true,  text: "100 leads / month" },
+        { ok: true,  text: "Lead Search (Google Places)" },
+        { ok: true,  text: "AI Lead Scoring & Insights" },
+        { ok: true,  text: "Saved Leads (up to 100)" },
+        { ok: true,  text: "Tasks & Call Logs" },
+        { ok: true,  text: "AI Assistant (50 msgs/mo)" },
+        { ok: true,  text: "Meta Ads Generator" },
+        { ok: true,  text: "Job Search (100 results/mo)" },
         { ok: false, text: "Export CSV / Excel / PDF" },
         { ok: false, text: "Email Center" },
         { ok: false, text: "Advanced Analytics" },
@@ -194,16 +194,16 @@ export default function HomePage() {
       monthlyUSD: 29, monthlyPKR: "8,000", popular: true,
       jobLimit: "500 results/mo",
       features: [
-        { ok: true, text: "1,000 leads / month" },
-        { ok: true, text: "Lead Search with all filters" },
-        { ok: true, text: "AI Lead Scoring & Full Insights" },
-        { ok: true, text: "Saved Leads (up to 1,000)" },
-        { ok: true, text: "Tasks & Call Logs" },
-        { ok: true, text: "AI Assistant (500 msgs/mo)" },
-        { ok: true, text: "Meta Ads Generator" },
-        { ok: true, text: "Job Search (500 results/mo)" },
-        { ok: true, text: "Export CSV / Excel / PDF" },
-        { ok: true, text: "Email Center" },
+        { ok: true,  text: "1,000 leads / month" },
+        { ok: true,  text: "Lead Search with all filters" },
+        { ok: true,  text: "AI Lead Scoring & Full Insights" },
+        { ok: true,  text: "Saved Leads (up to 1,000)" },
+        { ok: true,  text: "Tasks & Call Logs" },
+        { ok: true,  text: "AI Assistant (500 msgs/mo)" },
+        { ok: true,  text: "Meta Ads Generator" },
+        { ok: true,  text: "Job Search (500 results/mo)" },
+        { ok: true,  text: "Export CSV / Excel / PDF" },
+        { ok: true,  text: "Email Center" },
         { ok: false, text: "Advanced Analytics" },
       ],
     },
@@ -229,14 +229,14 @@ export default function HomePage() {
 
   /* ── Comparison ── */
   const comparison = [
-    { feature: "Starting Price", fatila: "$12/mo", apollo: "$49/mo", hunter: "$34/mo" },
-    { feature: "AI Lead Scoring", fatila: "Included", apollo: "Included", hunter: "Not available" },
-    { feature: "Google Places Data", fatila: "Real-time", apollo: "No", hunter: "No" },
-    { feature: "MENA Market Coverage", fatila: "Specialized", apollo: "Limited", hunter: "Limited" },
-    { feature: "Leads per Search", fatila: "60 leads", apollo: "Varies", hunter: "Domain only" },
-    { feature: "Meta Ads Generator", fatila: "Included", apollo: "No", hunter: "No" },
-    { feature: "Free Trial", fatila: "7 days", apollo: "Limited", hunter: "Limited" },
-    { feature: "Email Center", fatila: "Pro+", apollo: "Included", hunter: "Included" },
+    { feature: "Starting Price",       fatila: "$12/mo",        apollo: "$49/mo",     hunter: "$34/mo" },
+    { feature: "AI Lead Scoring",      fatila: "Included",      apollo: "Included",   hunter: "Not available" },
+    { feature: "Google Places Data",   fatila: "Real-time",     apollo: "No",         hunter: "No" },
+    { feature: "MENA Market Coverage", fatila: "Specialized",   apollo: "Limited",    hunter: "Limited" },
+    { feature: "Leads per Search",     fatila: "60 leads",      apollo: "Varies",     hunter: "Domain only" },
+    { feature: "Meta Ads Generator",   fatila: "Included",      apollo: "No",         hunter: "No" },
+    { feature: "Free Trial",           fatila: "7 days",        apollo: "Limited",    hunter: "Limited" },
+    { feature: "Email Center",         fatila: "Pro+",          apollo: "Included",   hunter: "Included" },
   ];
 
   return (
@@ -303,7 +303,7 @@ export default function HomePage() {
         .section-label { font-size:12px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:#39d353; margin-bottom:12px; display:block; }
       `}</style>
 
-      <canvas ref={canvasRef} style={{ position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh", zIndex: -10, pointerEvents: "none" }} />
+      <canvas ref={canvasRef} style={{ position:"fixed", top:0, left:0, width:"100vw", height:"100vh", zIndex:-10, pointerEvents:"none" }} />
       <div className="fixed inset-0 bg-gradient-to-br from-[#020817] via-[#04102b] to-[#02060f] z-[-20]" />
 
       <div className="relative z-10">
@@ -311,9 +311,9 @@ export default function HomePage() {
         {/* ══ TOP BANNER ══ */}
         <div className="top-banner w-full py-2 px-4 flex items-center justify-center gap-3 fixed top-0 left-0 right-0 z-[70]">
           <span className="banner-badge"><Zap size={10} /> FREE</span>
-          <div className="overflow-hidden flex-1 max-w-[600px]" style={{ maskImage: "linear-gradient(to right,transparent,black 12%,black 88%,transparent)" }}>
+          <div className="overflow-hidden flex-1 max-w-[600px]" style={{ maskImage:"linear-gradient(to right,transparent,black 12%,black 88%,transparent)" }}>
             <div className="banner-marquee-track">
-              {[0, 1].map(i => (
+              {[0,1].map(i => (
                 <span key={i} className="flex items-center gap-6 pr-6">
                   <span className="flex items-center gap-1.5 text-white text-xs font-semibold whitespace-nowrap"><TrendingUp size={11} className="text-[#39d353]" /> Start Finding B2B Leads for <span className="text-[#39d353] font-bold ml-1">Free</span></span>
                   <span className="text-[#39d353] text-xs">✦</span>
@@ -339,7 +339,7 @@ export default function HomePage() {
             Fatila
           </Link>
           <div className="hidden md:flex items-center gap-7">
-            {[{ label: "Home", href: "#" }, { label: "Features", href: "#features" }, { label: "How It Works", href: "#how" }, { label: "Pricing", href: "#pricing" }].map(l => (
+            {[{ label:"Home", href:"#" },{ label:"Features", href:"#features" },{ label:"How It Works", href:"#how" },{ label:"Pricing", href:"#pricing" }].map(l => (
               <a key={l.label} href={l.href} className="hover:text-[#39d353] transition-colors duration-200 text-sm">{l.label}</a>
             ))}
             <Link href="/contact" className="hover:text-[#39d353] transition-colors duration-200 text-sm">Contact</Link>
@@ -359,7 +359,7 @@ export default function HomePage() {
 
         {/* Mobile Dropdown */}
         <div className={`md:hidden mobile-menu ${menuOpen ? "mobile-menu-open" : "mobile-menu-closed"} fixed top-[86px] right-[5%] w-[210px] z-40 rounded-2xl overflow-hidden border border-[rgba(0,170,255,.3)] bg-[rgba(7,25,65,0.97)] backdrop-blur-[12px] shadow-[0_12px_40px_rgba(0,0,0,0.7)]`}>
-          {[{ label: "Home", href: "#" }, { label: "Features", href: "#features" }, { label: "How It Works", href: "#how" }, { label: "Pricing", href: "#pricing" }, { label: "Contact", href: "/contact" }].map(item => (
+          {[{ label:"Home", href:"#" },{ label:"Features", href:"#features" },{ label:"How It Works", href:"#how" },{ label:"Pricing", href:"#pricing" },{ label:"Contact", href:"/contact" }].map(item => (
             <a key={item.label} href={item.href} onClick={() => setMenuOpen(false)} className="block px-6 py-3 text-sm hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all border-b border-[rgba(255,255,255,0.06)]">{item.label}</a>
           ))}
           <button onClick={(e) => { setMenuOpen(false); handleDashboardClick(e); }} className="block w-full text-left px-6 py-3 text-sm text-white hover:text-[#39d353] hover:bg-[rgba(57,211,83,0.07)] transition-all border-b border-[rgba(255,255,255,0.06)] bg-transparent border-x-0 border-t-0 cursor-pointer">Dashboard</button>
@@ -427,7 +427,7 @@ export default function HomePage() {
 
           <div className="relative z-10 mt-8 flex flex-wrap justify-center gap-5 text-sm text-[#9fb8e6]">
             <span className="flex items-center gap-1.5">
-              {Array(5).fill(0).map((_, i) => <Star key={i} size={13} className="text-[#39d353] fill-[#39d353]" />)}
+              {Array(5).fill(0).map((_,i) => <Star key={i} size={13} className="text-[#39d353] fill-[#39d353]" />)}
               <strong className="text-white ml-1">5.0</strong> from early users
             </span>
             <span className="text-[rgba(255,255,255,0.15)]">|</span>
@@ -446,44 +446,28 @@ export default function HomePage() {
             <h2 className="text-2xl md:text-3xl font-bold text-white">See 60 Leads Found in 60 Seconds</h2>
           </div>
           <div className="video-placeholder">
-            <video
-              className="w-full rounded-b-[14px]"
-              controls
-              autoPlay
-              muted
-              loop
-              playsInline
-              poster=""
-            >
-              <source src="/videos/demo.mp4" type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
-            <div className="flex flex-col items-center justify-center gap-5 py-20 px-8">
-              <button className="video-play-btn" onClick={() => alert("Demo video coming soon!")}>
-                <Play size={28} fill="#081633" color="#081633" />
-              </button>
-              <div className="text-center">
-                <p className="text-white font-semibold text-lg mb-1">Watch the Platform in Action</p>
-                <p className="text-[#9fb8e6] text-sm">See how Fatila AI finds 60 leads in 60 seconds — live demo</p>
-              </div>
-              <div className="flex flex-wrap justify-center gap-3">
-                {[{ Icon: Search, label: "Industry Search" }, { Icon: Brain, label: "AI Scoring" }, { Icon: FileDown, label: "Export to CRM" }].map(({ Icon, label }) => (
-                  <span key={label} className="flex items-center gap-1.5 text-xs bg-[rgba(57,211,83,0.08)] border border-[rgba(57,211,83,0.18)] text-[#39d353] px-3 py-1.5 rounded-full">
-                    <Icon size={11} /> {label}
-                  </span>
-                ))}
-              </div>
-            </div>
+                   <video
+  className="w-full rounded-b-[14px]"
+  controls
+  autoPlay
+  muted
+  loop
+  playsInline
+  poster=""
+>
+  <source src="/videos/demo.mp4" type="video/mp4" />
+  Your browser does not support the video tag.
+</video>
           </div>
         </section>
 
         {/* ══ COUNTERS ══ */}
         <section ref={countersRef} className="grid grid-cols-2 md:grid-cols-4 gap-5 px-6 py-20 text-center max-w-[1000px] mx-auto">
           {[
-            { Icon: Database, val: counts.leads.toLocaleString() + "+", label: "Leads Generated" },
+            { Icon: Database,  val: counts.leads.toLocaleString() + "+",     label: "Leads Generated" },
             { Icon: Building2, val: counts.companies.toLocaleString() + "+", label: "Companies Indexed" },
-            { Icon: Layers, val: counts.industries + "+", label: "Industries Covered" },
-            { Icon: Globe, val: counts.countries + "+", label: "Countries" },
+            { Icon: Layers,    val: counts.industries + "+",                  label: "Industries Covered" },
+            { Icon: Globe,     val: counts.countries + "+",                   label: "Countries" },
           ].map(({ Icon, val, label }) => (
             <div key={label} className="bg-[rgba(255,255,255,0.03)] border border-[rgba(57,211,83,0.1)] rounded-2xl py-8 px-4 hover:border-[rgba(57,211,83,0.28)] transition-colors duration-300">
               <Icon size={24} className="text-[#39d353] mx-auto mb-3" />
@@ -558,11 +542,11 @@ export default function HomePage() {
             <span className="section-label">Real Users, Real Results</span>
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-3">What Our Users Say</h2>
             <div className="flex justify-center items-center gap-1 mb-2">
-              {Array(5).fill(0).map((_, i) => <Star key={i} size={18} className="text-[#39d353] fill-[#39d353]" />)}
+              {Array(5).fill(0).map((_,i) => <Star key={i} size={18} className="text-[#39d353] fill-[#39d353]" />)}
             </div>
             <p className="text-[#9fb8e6] text-sm">Loved by sales teams across Pakistan, Saudi Arabia, Jordan & USA</p>
           </div>
-          <div className="overflow-hidden" style={{ maskImage: "linear-gradient(to right,transparent,black 8%,black 92%,transparent)" }}>
+          <div className="overflow-hidden" style={{ maskImage:"linear-gradient(to right,transparent,black 8%,black 92%,transparent)" }}>
             <div className="testimonials-track py-2">
               {[...testimonials, ...testimonials].map((t, i) => (
                 <div key={i} className="testimonial-card">
@@ -574,7 +558,7 @@ export default function HomePage() {
                     </div>
                   </div>
                   <p className="text-[#9fb8e6] text-xs mb-2 font-medium">{t.role}</p>
-                  <div className="flex gap-0.5 mb-3">{Array(t.stars).fill(0).map((_, j) => <Star key={j} size={12} className="text-[#39d353] fill-[#39d353]" />)}</div>
+                  <div className="flex gap-0.5 mb-3">{Array(t.stars).fill(0).map((_,j) => <Star key={j} size={12} className="text-[#39d353] fill-[#39d353]" />)}</div>
                   <p className="text-[#cdd9ff] text-sm leading-relaxed">"{t.text}"</p>
                 </div>
               ))}
@@ -606,7 +590,7 @@ export default function HomePage() {
               </thead>
               <tbody>
                 {comparison.map((row, i) => (
-                  <tr key={row.feature} className={`comparison-row border-t border-[rgba(255,255,255,0.04)] ${i % 2 === 0 ? "bg-[rgba(255,255,255,0.015)]" : ""}`}>
+                  <tr key={row.feature} className={`comparison-row border-t border-[rgba(255,255,255,0.04)] ${i%2===0?"bg-[rgba(255,255,255,0.015)]":""}`}>
                     <td className="py-3.5 px-6 text-[#cdd9ff] text-sm">{row.feature}</td>
                     <td className="py-3.5 px-6 text-center text-[#39d353] font-semibold text-sm">{row.fatila}</td>
                     <td className="py-3.5 px-6 text-center text-[#9fb8e6] text-sm">{row.apollo}</td>
@@ -666,7 +650,7 @@ export default function HomePage() {
             ))}
           </div>
           <div className="mt-10 flex flex-wrap justify-center gap-6 text-sm text-[#9fb8e6]">
-            {[{ Icon: Shield, text: "Secure payment" }, { Icon: Award, text: "7-day money-back guarantee" }, { Icon: X, text: "Cancel anytime" }, { Icon: Clock, text: "Support within 24hrs" }].map(({ Icon, text }) => (
+            {[{ Icon: Shield, text:"Secure payment" },{ Icon: Award, text:"7-day money-back guarantee" },{ Icon: X, text:"Cancel anytime" },{ Icon: Clock, text:"Support within 24hrs" }].map(({ Icon, text }) => (
               <span key={text} className="flex items-center gap-1.5"><Icon size={13} className="text-[#39d353]" /> {text}</span>
             ))}
           </div>
@@ -706,7 +690,7 @@ export default function HomePage() {
             <CheckCircle size={13} className="text-[#39d353]" /> 7-day money back guarantee
           </p>
           <div className="mt-10 flex flex-wrap justify-center gap-3">
-            {["Pakistan", "Saudi Arabia", "Jordan", "United States", "Germany", "France"].map(c => (
+            {["Pakistan","Saudi Arabia","Jordan","United States","Germany","France"].map(c => (
               <span key={c} className="flex items-center gap-1.5 text-[#9fb8e6] text-xs bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.06)] px-3 py-1.5 rounded-full">
                 <Globe size={10} /> {c}
               </span>
