@@ -328,6 +328,14 @@ export default function ProjectHuntPage() {
         .msg-body :global(li){margin:3px 0;}
         .msg-body :global(code){background:rgba(0,255,153,.1);color:#00ff99;padding:2px 6px;border-radius:4px;font-size:12px;}
         .msg-body :global(strong){color:#fff;}
+
+        /* Table styles for sector intelligence reports */
+        .msg-body :global(table){width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;overflow-x:auto;display:block;}
+        .msg-body :global(th){background:rgba(0,255,153,.12);color:#00ff99;padding:8px 10px;text-align:left;border:1px solid rgba(0,255,153,.2);font-weight:600;white-space:nowrap;}
+        .msg-body :global(td){padding:8px 10px;border:1px solid rgba(255,255,255,.08);color:#e0e8f0;vertical-align:top;line-height:1.5;}
+        .msg-body :global(tr:nth-child(even) td){background:rgba(255,255,255,.02);}
+        .msg-body :global(tr:hover td){background:rgba(0,255,153,.04);}
+        .msg-body :global(hr){border:none;border-top:1px solid rgba(255,255,255,.08);margin:14px 0;}
         .msg-body.user{color:#e0ffe0;}
 
         /* Clickable links in AI responses */
