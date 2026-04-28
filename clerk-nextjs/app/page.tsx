@@ -450,18 +450,22 @@ export default function HomePage() {
               <span className="w-3 h-3 rounded-full bg-[#ff5f56]" /><span className="w-3 h-3 rounded-full bg-[#ffbd2e]" /><span className="w-3 h-3 rounded-full bg-[#27c93f]" />
               <span className="ml-4 text-xs text-[#9fb8e6] bg-[rgba(255,255,255,0.04)] rounded-full px-3 py-0.5 max-w-[240px]">fatilaai.com/dashboard</span>
             </div>
-          <video
-  className="w-full rounded-b-[14px]"
-  controls
-  autoPlay
-  muted
-  loop
-  playsInline
-  poster=""
->
-  <source src="/videos/demo.mp4" type="video/mp4" />
-  Your browser does not support the video tag.
-</video>
+            <div className="flex flex-col items-center justify-center gap-5 py-20 px-8">
+              <button className="video-play-btn" onClick={() => alert("Demo video coming soon!")}>
+                <Play size={28} fill="#081633" color="#081633" />
+              </button>
+              <div className="text-center">
+                <p className="text-white font-semibold text-lg mb-1">Watch the Platform in Action</p>
+                <p className="text-[#9fb8e6] text-sm">See how Fatila AI finds 60 leads in 60 seconds — live demo</p>
+              </div>
+              <div className="flex flex-wrap justify-center gap-3">
+                {[{ Icon: Search, label:"Industry Search" },{ Icon: Brain, label:"AI Scoring" },{ Icon: FileDown, label:"Export to CRM" }].map(({ Icon, label }) => (
+                  <span key={label} className="flex items-center gap-1.5 text-xs bg-[rgba(57,211,83,0.08)] border border-[rgba(57,211,83,0.18)] text-[#39d353] px-3 py-1.5 rounded-full">
+                    <Icon size={11} /> {label}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </section>
 
