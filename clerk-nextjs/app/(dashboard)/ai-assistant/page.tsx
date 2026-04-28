@@ -25,12 +25,12 @@ const PLAN_CONFIG = {
 type PlanKey = keyof typeof PLAN_CONFIG;
 
 const QUICK_PROMPTS = [
-  { label:"Find active tenders in Saudi Arabia",    text:"Find me current active tenders and projects in Saudi Arabia", icon:"briefcase" },
+  { label:"Active tenders in Saudi Arabia",         text:"Find me current active tenders and projects in Saudi Arabia", icon:"briefcase" },
   { label:"Latest engineering jobs in UAE",          text:"What are the latest engineering jobs available in UAE right now?", icon:"map" },
-  { label:"Find IT leads in London",                text:"Find IT companies in London looking for tech solutions", icon:"trend" },
   { label:"Marine industry projects KSA",           text:"Find current marine industry projects and tenders in Saudi Arabia", icon:"briefcase" },
   { label:"Pharma maintenance contracts",           text:"Find pharmaceutical maintenance and repair contracts currently open", icon:"trend" },
-  { label:"Defense sector opportunities",           text:"What defense and aviation projects are currently active globally?", icon:"briefcase" },
+  { label:"Defense sector projects globally",       text:"What defense and aviation projects are currently active globally?", icon:"briefcase" },
+  { label:"PCB & electronics jobs KSA",            text:"Find latest PCB repair and electronics engineering jobs in Saudi Arabia", icon:"trend" },
 ];
 
 // ─── Custom Markdown link renderer ───────────────────────────────────────────
@@ -145,7 +145,7 @@ export default function ProjectHuntPage() {
               <Bot size={32} color="#00ff99" strokeWidth={1.5}/>
             </div>
             <h1>ProjectHunt <span className="accent">AI</span></h1>
-            <p>Find live projects · Active tenders · Jobs & leads — Powered by AI · Built by FTI Solutions</p>
+            <p>Find active projects · Live tenders · Latest jobs — Powered by AI · Built by FTI Solutions</p>
 
             {msgMax !== Infinity && (
               <div className="msg-limit-badge">
@@ -254,7 +254,7 @@ export default function ProjectHuntPage() {
               <div className={`input-box ${atLimit?"disabled":""}`}>
                 <textarea
                   ref={textareaRef}
-                  placeholder={atLimit ? "Message limit reached — upgrade to continue" : "Find projects, tenders, jobs, or leads..."}
+                  placeholder={atLimit ? "Message limit reached — upgrade to continue" : "Find active projects, tenders, or jobs..."}
                   value={prompt}
                   onChange={handleChange}
                   onKeyDown={handleKeyDown}
