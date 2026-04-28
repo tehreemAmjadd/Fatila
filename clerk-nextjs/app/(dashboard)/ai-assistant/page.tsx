@@ -310,9 +310,9 @@ export default function ProjectHuntPage() {
         .msg-wrap.user{justify-content:flex-end;}
         .msg-wrap.ai{justify-content:flex-start;}
 
-        .bubble{max-width:70%;}
+        .bubble{max-width:85%;word-break:break-word;overflow-wrap:break-word;}
         .bubble.user{background:rgba(0,255,153,.1);border:1px solid rgba(0,255,153,.2);border-radius:18px 18px 4px 18px;padding:12px 16px;}
-        .bubble.ai{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:18px 18px 18px 4px;padding:12px 16px;}
+        .bubble.ai{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:18px 18px 18px 4px;padding:14px 18px;width:100%;max-width:88%;}
 
         .ai-hdr{display:flex;align-items:center;gap:7px;margin-bottom:8px;}
         .ai-avatar-sm{width:24px;height:24px;border-radius:50%;background:rgba(0,255,153,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
