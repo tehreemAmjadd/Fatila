@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Bot, Search, Lock, AlertTriangle, Zap,
-  Send, Trash2,
+  Send, Trash2, Briefcase, MapPin, TrendingUp,
 } from "lucide-react";
 
 interface ChatMessage {
@@ -24,15 +25,32 @@ const PLAN_CONFIG = {
 type PlanKey = keyof typeof PLAN_CONFIG;
 
 const QUICK_PROMPTS = [
-  { label:"Find dental clinics in Dubai",    text:"Find me 10 dental clinics in Dubai" },
-  { label:"What is Fatila?",                text:"What is Fatila and what does it do?" },
-  { label:"How do I score leads?",          text:"How do I score leads effectively?" },
-  { label:"About FTI Solutions",            text:"Tell me about FTI Solutions" },
-  { label:"What services does FTI offer?",  text:"What services does FTI Solutions offer?" },
-  { label:"Find IT companies in London",    text:"Find IT companies in London" },
+  { label:"Find active tenders in Saudi Arabia",    text:"Find me current active tenders and projects in Saudi Arabia", icon:"briefcase" },
+  { label:"Latest engineering jobs in UAE",          text:"What are the latest engineering jobs available in UAE right now?", icon:"map" },
+  { label:"Find IT leads in London",                text:"Find IT companies in London looking for tech solutions", icon:"trend" },
+  { label:"Marine industry projects KSA",           text:"Find current marine industry projects and tenders in Saudi Arabia", icon:"briefcase" },
+  { label:"Pharma maintenance contracts",           text:"Find pharmaceutical maintenance and repair contracts currently open", icon:"trend" },
+  { label:"Defense sector opportunities",           text:"What defense and aviation projects are currently active globally?", icon:"briefcase" },
 ];
 
-export default function AIAssistantPage() {
+// ─── Custom Markdown link renderer ───────────────────────────────────────────
+const MarkdownComponents = {
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="md-link"
+    >
+      🔗 {children}
+    </a>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p style={{ margin: "5px 0" }}>{children}</p>
+  ),
+};
+
+export default function ProjectHuntPage() {
   const { user } = useUser();
   const chatEndRef  = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -42,11 +60,10 @@ export default function AIAssistantPage() {
   const [loading,       setLoading]       = useState(false);
   const [introVisible,  setIntroVisible]  = useState(true);
   const [dbUser,        setDbUser]        = useState<any>(null);
-  const [msgsUsed,      setMsgsUsed]      = useState(0); // messages sent this session
+  const [msgsUsed,      setMsgsUsed]      = useState(0);
 
   const email = user?.primaryEmailAddress?.emailAddress;
 
-  // ── Fetch user plan ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!email) return;
     fetch("/api/get-user", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ email }) })
@@ -55,7 +72,6 @@ export default function AIAssistantPage() {
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [chat, loading]);
 
-  // ── Derived plan info ─────────────────────────────────────────────────────
   const isAdmin = dbUser?.role === "admin";
   const plan    = isAdmin ? "business" : ((dbUser?.plan as PlanKey) || "free");
   const planCfg = PLAN_CONFIG[plan] || PLAN_CONFIG.free;
@@ -63,7 +79,6 @@ export default function AIAssistantPage() {
   const msgMax  = planCfg.aiMsgs;
   const atLimit = msgMax !== Infinity && msgsUsed >= msgMax;
 
-  // ── Send message ──────────────────────────────────────────────────────────
   const handleSend = async (msg?: string) => {
     const content = (msg || prompt).trim();
     if (!content || atLimit) return;
@@ -96,9 +111,14 @@ export default function AIAssistantPage() {
   const clearChat = () => { setChat([]); setIntroVisible(true); };
   const fmtTime   = (d?:Date) => d ? d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}) : "";
 
+  const getIcon = (iconName: string) => {
+    if (iconName === "briefcase") return <Briefcase size={12} color="#8899bb"/>;
+    if (iconName === "map") return <MapPin size={12} color="#8899bb"/>;
+    return <TrendingUp size={12} color="#8899bb"/>;
+  };
+
   return (
     <>
-      {/* ── Chat layout ── */}
       <div className="chat-layout">
 
         {/* ── FREE GATE ── */}
@@ -106,11 +126,11 @@ export default function AIAssistantPage() {
           <div className="gate-overlay">
             <div className="gate-box">
               <div className="gate-icon-wrap"><Lock size={30} strokeWidth={1.4} color="#8899bb"/></div>
-              <h3>AI Assistant is a Paid Feature</h3>
-              <p>Upgrade to Starter or higher to start chatting with the AI Assistant for lead generation, platform help, and sales strategy.</p>
+              <h3>ProjectHunt AI is a Paid Feature</h3>
+              <p>Upgrade to Starter or higher to start hunting live projects, tenders, jobs, and leads with AI.</p>
               <a href="/billing" className="gate-cta">View Plans — Starting $12/mo</a>
               <div className="gate-perks">
-                {["Lead generation advice","Platform feature help","FTI Solutions info","B2B sales strategies"].map(f=>(
+                {["Live project tenders","Job opportunities","B2B lead hunting","FTI Solutions info"].map(f=>(
                   <span key={f} className="perk"><Zap size={11} color="#00ff99"/>{f}</span>
                 ))}
               </div>
@@ -124,10 +144,9 @@ export default function AIAssistantPage() {
             <div className="ai-avatar">
               <Bot size={32} color="#00ff99" strokeWidth={1.5}/>
             </div>
-            <h1>Fatila AI Assistant</h1>
-            <p>Powered by GPT-4  ·  Expert in B2B lead generation  ·  Built by FTI Solutions</p>
+            <h1>ProjectHunt <span className="accent">AI</span></h1>
+            <p>Find live projects · Active tenders · Jobs & leads — Powered by AI · Built by FTI Solutions</p>
 
-            {/* Msg limit badge */}
             {msgMax !== Infinity && (
               <div className="msg-limit-badge">
                 <Zap size={12} color={planCfg.color}/>
@@ -146,7 +165,7 @@ export default function AIAssistantPage() {
             <div className="quick-grid">
               {QUICK_PROMPTS.map((qp,i)=>(
                 <button key={i} className="quick-btn" onClick={()=>handleSend(qp.text)}>
-                  <Search size={12} color="#8899bb"/>
+                  {getIcon(qp.icon)}
                   {qp.label}
                 </button>
               ))}
@@ -163,13 +182,20 @@ export default function AIAssistantPage() {
                   {msg.role==="ai" && (
                     <div className="ai-hdr">
                       <div className="ai-avatar-sm"><Bot size={13} color="#00ff99" strokeWidth={1.8}/></div>
-                      <span className="ai-name">Fatila AI</span>
+                      <span className="ai-name">ProjectHunt AI</span>
                       <span className="msg-time">{fmtTime(msg.timestamp)}</span>
                     </div>
                   )}
                   <div className={`msg-body ${msg.role}`}>
                     {msg.role==="ai"
-                      ? <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      ? (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={MarkdownComponents as any}
+                        >
+                          {msg.content}
+                        </ReactMarkdown>
+                      )
                       : msg.content
                     }
                   </div>
@@ -183,7 +209,7 @@ export default function AIAssistantPage() {
                 <div className="bubble ai">
                   <div className="ai-hdr">
                     <div className="ai-avatar-sm"><Bot size={13} color="#00ff99" strokeWidth={1.8}/></div>
-                    <span className="ai-name">Fatila AI</span>
+                    <span className="ai-name">ProjectHunt AI</span>
                   </div>
                   <div className="typing"><span/><span/><span/></div>
                 </div>
@@ -197,7 +223,6 @@ export default function AIAssistantPage() {
         {isPaid && (
           <div className="input-area">
 
-            {/* Limit warning */}
             {msgMax !== Infinity && (
               <div className="limit-bar">
                 <div className="limit-track">
@@ -229,7 +254,7 @@ export default function AIAssistantPage() {
               <div className={`input-box ${atLimit?"disabled":""}`}>
                 <textarea
                   ref={textareaRef}
-                  placeholder={atLimit ? "Message limit reached — upgrade to continue" : "Ask about leads, platform features, or FTI Solutions..."}
+                  placeholder={atLimit ? "Message limit reached — upgrade to continue" : "Find projects, tenders, jobs, or leads..."}
                   value={prompt}
                   onChange={handleChange}
                   onKeyDown={handleKeyDown}
@@ -264,7 +289,8 @@ export default function AIAssistantPage() {
         /* Intro */
         .intro-screen{position:absolute;top:50%;left:50%;transform:translate(-50%,-58%);text-align:center;width:90%;max-width:580px;z-index:1;}
         .ai-avatar{width:64px;height:64px;border-radius:50%;background:rgba(0,255,153,.1);border:1px solid rgba(0,255,153,.25);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;}
-        .intro-screen h1{font-size:23px;font-weight:600;margin-bottom:7px;}
+        .intro-screen h1{font-size:26px;font-weight:700;margin-bottom:7px;letter-spacing:-0.5px;}
+        .intro-screen h1 .accent{color:#00ff99;}
         .intro-screen p{color:#8899bb;font-size:13px;margin-bottom:16px;}
 
         .msg-limit-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);padding:5px 14px;border-radius:20px;font-size:12px;margin-bottom:22px;}
@@ -304,15 +330,45 @@ export default function AIAssistantPage() {
         .msg-body :global(strong){color:#fff;}
         .msg-body.user{color:#e0ffe0;}
 
+        /* Clickable links in AI responses */
+        .msg-body :global(.md-link){
+          display:inline-flex;
+          align-items:center;
+          gap:4px;
+          color:#00ff99;
+          text-decoration:none;
+          background:rgba(0,255,153,.08);
+          border:1px solid rgba(0,255,153,.25);
+          padding:3px 10px;
+          border-radius:6px;
+          font-size:13px;
+          font-weight:500;
+          transition:.2s;
+          word-break:break-all;
+          margin:2px 0;
+        }
+        .msg-body :global(.md-link:hover){
+          background:rgba(0,255,153,.18);
+          border-color:rgba(0,255,153,.5);
+          text-decoration:underline;
+        }
+
         .typing{display:flex;gap:5px;padding:4px 0;}
         .typing span{width:7px;height:7px;background:#00ff99;border-radius:50%;animation:bounce .6s infinite alternate;}
         .typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
         @keyframes bounce{to{transform:translateY(-6px);opacity:.4}}
 
-        /* Input */
-        .input-area{padding:12px 40px 18px;background:rgba(2,8,23,.85);backdrop-filter:blur(12px);border-top:1px solid rgba(255,255,255,.07);}
+        /* Input — compact on desktop so WhatsApp icon stays to the right */
+        .input-area{
+          padding:10px 40px 14px;
+          background:rgba(2,8,23,.85);
+          backdrop-filter:blur(12px);
+          border-top:1px solid rgba(255,255,255,.07);
+          /* Leaves room on the right for floating buttons */
+          margin-right:70px;
+        }
 
-        .limit-bar{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+        .limit-bar{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
         .limit-track{flex:1;height:3px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden;}
         .limit-fill{height:100%;border-radius:3px;transition:width .4s ease;}
         .limit-txt{font-size:11px;white-space:nowrap;}
@@ -341,7 +397,7 @@ export default function AIAssistantPage() {
         @media(max-width:900px){
           .chat-layout{left:0;}
           .messages-area{padding:14px;}
-          .input-area{padding:10px 14px 14px;}
+          .input-area{padding:10px 14px 14px;margin-right:0;}
           .bubble{max-width:90%;}
           .quick-grid{grid-template-columns:1fr;}
         }
