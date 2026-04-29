@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.91.1",
     "@clerk/nextjs": "^7.0.6",
     "@prisma/extension-accelerate": "^3.0.1",
     "@types/nodemailer": "^8.0.0",
