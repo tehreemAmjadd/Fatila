@@ -18,6 +18,7 @@ interface ChatMessage {
 // ─── Plan limits ──────────────────────────────────────────────────────────────
 const PLAN_CONFIG = {
   free:     { label:"Free",         color:"#8899bb", aiMsgs:0 },
+  trial:    { label:"Trial",        color:"#ffd700", aiMsgs:5 },
   starter:  { label:"Starter",      color:"#00ff99", aiMsgs:50 },
   pro:      { label:"Professional", color:"#3b9eff", aiMsgs:500 },
   business: { label:"Business",     color:"#a78bfa", aiMsgs:Infinity },
@@ -74,7 +75,8 @@ export default function ProjectHuntPage() {
 
   const isAdmin = dbUser?.role === "admin";
   const isTest  = dbUser?.role === "test";
-  const plan    = (isAdmin || isTest) ? "business" : ((dbUser?.plan as PlanKey) || "free");
+  const effectivePlan = dbUser?.effectivePlan || dbUser?.plan || "free";
+  const plan    = (isAdmin || isTest) ? "business" : ((effectivePlan as PlanKey) || "free");
   const planCfg = PLAN_CONFIG[plan] || PLAN_CONFIG.free;
   const isPaid  = isAdmin || isTest || plan !== "free";
   const msgMax  = planCfg.aiMsgs;
@@ -151,7 +153,9 @@ export default function ProjectHuntPage() {
             {msgMax !== Infinity && (
               <div className="msg-limit-badge">
                 <Zap size={12} color={planCfg.color}/>
-                <span style={{color:planCfg.color}}>{msgMax} messages/month</span>
+                <span style={{color:planCfg.color}}>
+                  {plan==="trial" ? `${Math.max(0,msgMax-msgsUsed)} of ${msgMax} trial messages left` : `${msgMax} messages/month`}
+                </span>
                 <span className="sep">·</span>
                 <a href="/billing">Upgrade for more</a>
               </div>
@@ -241,8 +245,8 @@ export default function ProjectHuntPage() {
             {atLimit && (
               <div className="limit-gate">
                 <AlertTriangle size={13} color="#ff6b6b"/>
-                <span>Message limit reached for this plan.</span>
-                <a href="/billing">Upgrade</a>
+                <span>{plan==="trial" ? "Trial limit reached — 5 messages used." : "Message limit reached for this plan."}</span>
+                <a href="/billing">Upgrade your plan</a>
               </div>
             )}
 
@@ -255,7 +259,7 @@ export default function ProjectHuntPage() {
               <div className={`input-box ${atLimit?"disabled":""}`}>
                 <textarea
                   ref={textareaRef}
-                  placeholder={atLimit ? "Message limit reached — upgrade to continue" : "Find active projects, tenders, or jobs..."}
+                  placeholder={atLimit ? (plan==="trial" ? "Trial limit reached — upgrade your plan to continue" : "Message limit reached — upgrade to continue") : "Find active projects, tenders, or jobs..."}
                   value={prompt}
                   onChange={handleChange}
                   onKeyDown={handleKeyDown}

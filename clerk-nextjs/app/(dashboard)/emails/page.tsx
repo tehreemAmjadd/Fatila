@@ -11,12 +11,12 @@ import {
 // ─── Plan config ──────────────────────────────────────────────────────────────
 // Email Center is ONLY for Pro and Business
 const PLAN_CONFIG = {
-  free:     { label:"Free",         color:"#8899bb", canEmail:false },
-  trial:    { label:"Trial",        color:"#ffd700", canEmail:false },
-  starter:  { label:"Starter",      color:"#00ff99", canEmail:false },
-  pro:      { label:"Professional", color:"#3b9eff", canEmail:true  },
-  business: { label:"Business",     color:"#a78bfa", canEmail:true  },
-  expired:  { label:"Expired",      color:"#ff6b6b", canEmail:false },
+  free:     { label:"Free",         color:"#8899bb", canEmail:false, emailLimit:0 },
+  trial:    { label:"Trial",        color:"#ffd700", canEmail:true, emailLimit:20 },
+  starter:  { label:"Starter",      color:"#00ff99", canEmail:false, emailLimit:0 },
+  pro:      { label:"Professional", color:"#3b9eff", canEmail:true, emailLimit:Infinity },
+  business: { label:"Business",     color:"#a78bfa", canEmail:true, emailLimit:Infinity },
+  expired:  { label:"Expired",      color:"#ff6b6b", canEmail:false, emailLimit:0 },
 } as const;
 type PlanKey = keyof typeof PLAN_CONFIG;
 
@@ -130,6 +130,8 @@ export default function EmailsPage() {
   const [logs,        setLogs]        = useState<EmailLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
 
+  const [emailsSent, setEmailsSent] = useState(0);
+
   const userEmail = user?.primaryEmailAddress?.emailAddress;
 
   // ── Fetch plan ────────────────────────────────────────────────────────────
@@ -235,6 +237,7 @@ export default function EmailsPage() {
       if (data.success) {
         setSendResult({type:"success",msg:"Email sent successfully!"});
         setToEmail(""); setSubject(""); setBody(""); setAttachments([]);
+        if (isTrial) setEmailsSent(p => p + 1);
       } else {
         setSendResult({type:"error",msg:data.error||"Send failed"});
       }
@@ -297,13 +300,18 @@ export default function EmailsPage() {
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey)||"free");
   const planCfg       = PLAN_CONFIG[effectivePlan]||PLAN_CONFIG.free;
   const canEmail      = isAdmin || isTest || planCfg.canEmail;
+  const isTrial       = effectivePlan === "trial";
+  // Trial: single email max 20, bulk locked
+  const emailLimit    = (isAdmin || isTest) ? Infinity : (planCfg.emailLimit ?? Infinity);
+  const trialAtLimit  = isTrial && emailsSent >= 20;
+  const canBulk       = (isAdmin || isTest) || (!isTrial && planCfg.canEmail);
   const fmtDate = (d:string) => { try{return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}catch{return "";} };
 
   return (
     <>
       <div className="main">
 
-        {/* ── GATE: Free, Trial, Starter ── */}
+        {/* ── GATE: Free, Starter, Expired ── */}
         {!canEmail && (
           <div className="gate-box">
             <div className="gate-icon"><Lock size={30} strokeWidth={1.4} color="#8899bb"/></div>
@@ -354,8 +362,15 @@ export default function EmailsPage() {
             {/* Tabs */}
             <div className="tabs-row">
               {TABS.map(({id,label,Icon})=>(
-                <button key={id} className={`tab-btn ${activeTab===id?"active":""}`} onClick={()=>setActiveTab(id)}>
-                  <Icon size={14} strokeWidth={1.8}/>{label}
+                <button
+                  key={id}
+                  className={`tab-btn ${activeTab===id?"active":""} ${id==="bulk"&&isTrial?"tab-locked":""}`}
+                  onClick={()=>{ if(id==="bulk"&&isTrial){return;}setActiveTab(id); }}
+                  title={id==="bulk"&&isTrial?"Bulk Email is not available on Trial plan":""}
+                >
+                  <Icon size={14} strokeWidth={1.8}/>
+                  {label}
+                  {id==="bulk"&&isTrial&&<Lock size={11} style={{marginLeft:4,opacity:.6}}/>}
                 </button>
               ))}
             </div>
@@ -540,7 +555,29 @@ export default function EmailsPage() {
                     </div>
                   )}
 
-                  <button className="send-btn" onClick={handleSend} disabled={sending||!smtpSaved}>
+                  {/* Trial email limit banner */}
+                  {isTrial && (
+                    <div style={{
+                      display:"flex",alignItems:"center",justifyContent:"space-between",
+                      background: trialAtLimit?"rgba(255,107,107,.08)":"rgba(255,215,0,.07)",
+                      border: trialAtLimit?"1px solid rgba(255,107,107,.25)":"1px solid rgba(255,215,0,.2)",
+                      borderRadius:"9px",padding:"10px 14px",marginTop:"10px",gap:"10px",flexWrap:"wrap"
+                    }}>
+                      <div style={{display:"flex",alignItems:"center",gap:"7px"}}>
+                        {trialAtLimit
+                          ? <><AlertTriangle size={14} color="#ff6b6b"/><span style={{fontSize:"13px",color:"#ff6b6b",fontWeight:600}}>Trial limit reached — 20 emails used.</span></>
+                          : <><Zap size={14} color="#ffd700"/><span style={{fontSize:"13px",color:"#ffd700"}}>Trial: <strong>{emailsSent} / 20</strong> emails sent</span></>
+                        }
+                      </div>
+                      {trialAtLimit && (
+                        <a href="/billing" style={{fontSize:"12px",fontWeight:700,color:"#ff6b6b",background:"rgba(255,107,107,.12)",border:"1px solid rgba(255,107,107,.3)",padding:"4px 12px",borderRadius:"20px",textDecoration:"none"}}>
+                          Upgrade your plan
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  <button className="send-btn" onClick={handleSend} disabled={sending||!smtpSaved||trialAtLimit}>
                     {sending?<><RefreshCw size={14} className="spin"/>Sending...</>:<><Send size={14}/>Send Email</>}
                   </button>
                   {!smtpSaved&&<p className="smtp-warn"><AlertTriangle size={12}/>Connect your email above before sending.</p>}
@@ -549,7 +586,22 @@ export default function EmailsPage() {
             )}
 
             {/* ── BULK TAB ── */}
-            {activeTab==="bulk" && (
+            {activeTab==="bulk" && isTrial && (
+              <div style={{textAlign:"center",padding:"60px 20px",maxWidth:"440px",margin:"0 auto"}}>
+                <div style={{width:"64px",height:"64px",borderRadius:"50%",background:"rgba(136,153,187,.1)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 18px"}}>
+                  <Lock size={28} strokeWidth={1.4} color="#8899bb"/>
+                </div>
+                <h3 style={{fontSize:"19px",marginBottom:"10px"}}>Bulk Email — Pro Feature</h3>
+                <p style={{color:"#8899bb",fontSize:"13px",marginBottom:"22px",lineHeight:1.6}}>
+                  Bulk email sending is not available on the Trial plan.<br/>
+                  Upgrade to Professional or Business to send emails to multiple leads at once.
+                </p>
+                <a href="/billing" style={{display:"inline-block",background:"#00ff99",color:"#020817",fontWeight:700,padding:"11px 26px",borderRadius:"30px",textDecoration:"none",fontSize:"14px"}}>
+                  Upgrade your plan
+                </a>
+              </div>
+            )}
+            {activeTab==="bulk" && !isTrial && (
               <div className="bulk-layout">
                 {/* Lead selector */}
                 <div className="bulk-leads-panel">
@@ -870,6 +922,9 @@ export default function EmailsPage() {
         .modal-foot{padding:14px 22px;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:flex-end;gap:10px;}
         .cancel-btn{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#ccc;padding:8px 16px;border-radius:8px;cursor:pointer;}
         .save-btn-modal{display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,#00ff99,#00cc66);color:#020817;border:none;padding:8px 20px;border-radius:8px;font-weight:700;cursor:pointer;}
+
+        .tab-locked{opacity:.5;cursor:not-allowed!important;}
+        .tab-locked:hover{background:none!important;color:#8899bb!important;}
 
         .spin{animation:spin .7s linear infinite;}
         @keyframes spin{to{transform:rotate(360deg)}}

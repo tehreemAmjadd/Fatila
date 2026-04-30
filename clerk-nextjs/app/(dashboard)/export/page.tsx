@@ -12,7 +12,7 @@ import {
 // Export is for Pro and Business only
 const PLAN_CONFIG = {
   free:     { label:"Free",         color:"#8899bb", canExport:false },
-  trial:    { label:"Trial",        color:"#ffd700", canExport:false },
+  trial:    { label:"Trial",        color:"#ffd700", canExport:true  },
   starter:  { label:"Starter",      color:"#00ff99", canExport:false },
   pro:      { label:"Professional", color:"#3b9eff", canExport:true  },
   business: { label:"Business",     color:"#a78bfa", canExport:true  },
