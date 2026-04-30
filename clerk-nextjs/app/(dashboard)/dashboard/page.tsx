@@ -127,10 +127,12 @@ export default function DashboardPage() {
 
   // ── Derived ──────────────────────────────────────────────────────────────
   const isAdmin   = dbUser?.role === "admin";
-  // Admin always gets business-level access
-  const plan      = isAdmin ? "business" : ((dbUser?.plan as PlanKey) || "free");
+  // Test user: gets all business features but NO admin panel / analytics shown
+  const isTest    = dbUser?.role === "test";
+  // Admin + Test both get business-level access
+  const plan      = (isAdmin || isTest) ? "business" : ((dbUser?.plan as PlanKey) || "free");
   const planCfg   = PLAN_CONFIG[plan] || PLAN_CONFIG.free;
-  const isPaid    = isAdmin || plan === "trial" || plan !== "free";
+  const isPaid    = isAdmin || isTest || plan === "trial" || plan !== "free";
   // Parse leadsUsed safely — API might return array, object, or number
   const _rawLeads = stats?.totalLeads ?? stats?.monthlyLeads ?? stats?.leadsUsedThisMonth ?? 0;
   const leadsUsed = typeof _rawLeads === "number" ? _rawLeads
@@ -296,7 +298,7 @@ export default function DashboardPage() {
               </>
             )}
 
-            {/* ── ADMIN PANEL ── */}
+            {/* ── ADMIN PANEL ── only shown to real admins, not test users */}
             {isAdmin && (
               <div className="admin-panel">
                 <div className="admin-hdr">
@@ -485,7 +487,7 @@ export default function DashboardPage() {
                             <td className="td-email">{u.email}</td>
                             <td><span style={{color:u.plan==="business"?"#a78bfa":u.plan==="pro"?"#3b9eff":u.plan==="starter"?"#00ff99":"#8899bb",fontSize:12,fontWeight:700}}>{u.plan||"free"}</span></td>
                             <td><span style={{color:u.subscriptionStatus==="active"?"#00ff99":u.isOnTrial?"#ffd700":"#8899bb",fontSize:12}}>{u.subscriptionStatus==="active"?"Active":u.isOnTrial?"Trial":"Inactive"}</span></td>
-                            <td><span style={{color:u.role==="admin"?"#ffd700":"#8899bb",fontSize:12}}>{u.role==="admin"?"Admin":"User"}</span></td>
+                            <td><span style={{color:u.role==="admin"?"#ffd700":u.role==="test"?"#a78bfa":"#8899bb",fontSize:12}}>{u.role==="admin"?"Admin":u.role==="test"?"Test":"User"}</span></td>
                             <td className="td-c">{u._count?.leads??"—"}</td>
                             <td className="td-c">{u._count?.tasks??"—"}</td>
                             <td className="td-c">{fmtDate(u.createdAt)}</td>

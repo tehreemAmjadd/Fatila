@@ -167,10 +167,11 @@ export default function SavedLeadsPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isAdmin       = dbUser?.role === "admin";
+  const isTest        = dbUser?.role === "test";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey) || "free");
   const planCfg       = PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free;
-  const canAccess     = isAdmin || (effectivePlan !== "free" && effectivePlan !== "expired");
-  const canExport     = isAdmin || planCfg.canExport;
+  const canAccess     = isAdmin || isTest || (effectivePlan !== "free" && effectivePlan !== "expired");
+  const canExport     = isAdmin || isTest || planCfg.canExport;
 
   return (
     <>

@@ -293,9 +293,10 @@ export default function EmailsPage() {
   const selectAll = () => { setSelectedLeads(selectedLeads.length===leads.length?[]:leads); };
 
   const isAdmin       = dbUser?.role === "admin";
+  const isTest        = dbUser?.role === "test";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey)||"free");
   const planCfg       = PLAN_CONFIG[effectivePlan]||PLAN_CONFIG.free;
-  const canEmail      = isAdmin || planCfg.canEmail;
+  const canEmail      = isAdmin || isTest || planCfg.canEmail;
   const fmtDate = (d:string) => { try{return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}catch{return "";} };
 
   return (

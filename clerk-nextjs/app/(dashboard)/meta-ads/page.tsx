@@ -727,8 +727,9 @@ export default function MetaAdsPage() {
   };
 
   const isAdmin = dbUser?.role === "admin";
+  const isTest = dbUser?.role === "test";
   const effectivePlan = dbUser?.effectivePlan || "free";
-  const isPaid = isAdmin || ["pro","business","starter","trial"].includes(effectivePlan);
+  const isPaid = isAdmin || isTest || ["pro","business","starter","trial"].includes(effectivePlan);
   const planColor = effectivePlan==="business"?"#a78bfa":effectivePlan==="pro"?"#3b9eff":effectivePlan==="trial"?"#ffd700":"#00ff99";
 
   const fmtNum = (n: number) => n >= 1000 ? `${(n/1000).toFixed(0)}K` : String(n);

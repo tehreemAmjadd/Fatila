@@ -133,13 +133,14 @@ function BillingContent() {
   };
 
   const isAdmin       = dbUser?.role === "admin";
+  const isTest        = dbUser?.role === "test";
   const effectivePlan = dbUser?.effectivePlan || "free";
   const isOnTrial     = dbUser?.isOnTrial;
   const canStartTrial = dbUser?.canStartTrial;
   const daysLeft      = dbUser?.trialDaysLeft ?? 0;
-  const isPaid        = isAdmin || dbUser?.subscriptionStatus === "active";
+  const isPaid        = isAdmin || isTest || dbUser?.subscriptionStatus === "active";
   const jobUsed       = Number(dbUser?.jobResultsUsed ?? 0);
-  const currentJobLimit = JOB_LIMITS[isAdmin ? "admin" : effectivePlan] ?? "—";
+  const currentJobLimit = JOB_LIMITS[(isAdmin || isTest) ? "admin" : effectivePlan] ?? "—";
 
   return (
     <>
@@ -156,8 +157,19 @@ function BillingContent() {
           </div>
         )}
 
+        {/* ── TEST USER BANNER ── */}
+        {isTest && (
+          <div className="admin-billing-banner">
+            <Shield size={18} color="#00ff99"/>
+            <div>
+              <p className="admin-bill-title">Test Account — All Features Unlocked</p>
+              <p className="admin-bill-sub">You have full platform access. No billing or subscription required.</p>
+            </div>
+          </div>
+        )}
+
         {/* ── EXPIRED BANNER ── */}
-        {!isAdmin && (expired || effectivePlan === "expired") && (
+        {!isAdmin && !isTest && (expired || effectivePlan === "expired") && (
           <div className="expired-banner">
             <AlertTriangle size={18} color="#ff6b6b"/>
             <div>
@@ -168,7 +180,7 @@ function BillingContent() {
         )}
 
         {/* ── TRIAL ACTIVE BANNER ── */}
-        {!isAdmin && isOnTrial && (
+        {!isAdmin && !isTest && isOnTrial && (
           <div className="trial-active-banner">
             <Clock size={16} color="#ffd700"/>
             <span><strong>{daysLeft} day{daysLeft!==1?"s":""}</strong> remaining in your free trial</span>
@@ -183,7 +195,7 @@ function BillingContent() {
         </div>
 
         {/* ── JOB SEARCH USAGE CARD ── */}
-        {!isAdmin && effectivePlan !== "free" && (
+        {!isAdmin && !isTest && effectivePlan !== "free" && (
           <div className="job-usage-card">
             <div className="job-usage-left">
               <div className="job-usage-icon"><Briefcase size={16} color="#3b9eff"/></div>
@@ -216,7 +228,7 @@ function BillingContent() {
         )}
 
         {/* ── TRIAL CARD ── */}
-        {!isAdmin && (canStartTrial || trialSuccess) && !isPaid && !isOnTrial && (
+        {!isAdmin && !isTest && (canStartTrial || trialSuccess) && !isPaid && !isOnTrial && (
           <div className="trial-card">
             <div className="trial-left">
               <div className="trial-badge"><Zap size={14} color="#020817"/>7-Day Free Trial</div>

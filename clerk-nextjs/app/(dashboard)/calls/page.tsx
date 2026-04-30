@@ -147,9 +147,10 @@ export default function CallsPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isAdmin       = dbUser?.role === "admin";
+  const isTest        = dbUser?.role === "test";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey)||"free");
   const planCfg       = PLAN_CONFIG[effectivePlan]||PLAN_CONFIG.free;
-  const canAccess     = isAdmin || (effectivePlan!=="free" && effectivePlan!=="expired");
+  const canAccess     = isAdmin || isTest || (effectivePlan!=="free" && effectivePlan!=="expired");
 
   const fmtDate = (d:string) => { try{return new Date(d).toLocaleDateString("en-GB",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});}catch{return "";} };
 

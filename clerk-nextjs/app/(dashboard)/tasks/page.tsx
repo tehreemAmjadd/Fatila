@@ -116,9 +116,10 @@ export default function TasksPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isAdmin       = dbUser?.role === "admin";
+  const isTest        = dbUser?.role === "test";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey)||"free");
   const planCfg       = PLAN_CONFIG[effectivePlan]||PLAN_CONFIG.free;
-  const canAccess     = isAdmin || (effectivePlan!=="free" && effectivePlan!=="expired");
+  const canAccess     = isAdmin || isTest || (effectivePlan!=="free" && effectivePlan!=="expired");
 
   const filteredTasks = tasks.filter(t=>{
     if (filter==="pending") return !t.completed;

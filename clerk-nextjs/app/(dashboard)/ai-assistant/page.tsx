@@ -73,9 +73,10 @@ export default function ProjectHuntPage() {
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:"smooth" }); }, [chat, loading]);
 
   const isAdmin = dbUser?.role === "admin";
-  const plan    = isAdmin ? "business" : ((dbUser?.plan as PlanKey) || "free");
+  const isTest  = dbUser?.role === "test";
+  const plan    = (isAdmin || isTest) ? "business" : ((dbUser?.plan as PlanKey) || "free");
   const planCfg = PLAN_CONFIG[plan] || PLAN_CONFIG.free;
-  const isPaid  = isAdmin || plan !== "free";
+  const isPaid  = isAdmin || isTest || plan !== "free";
   const msgMax  = planCfg.aiMsgs;
   const atLimit = msgMax !== Infinity && msgsUsed >= msgMax;
 

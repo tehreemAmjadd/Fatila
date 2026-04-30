@@ -202,12 +202,13 @@ export default function LeadSearchPage() {
 
   // ── Derived plan info ─────────────────────────────────────────────────────
   const isAdmin       = dbUser?.role === "admin";
+  const isTest        = dbUser?.role === "test";
   const effectivePlan = ((dbUser?.effectivePlan as PlanKey) || "free");
-  const planCfg       = isAdmin ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
-  const canSearch     = isAdmin || effectivePlan !== "expired";
+  const planCfg       = (isAdmin || isTest) ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
+  const canSearch     = isAdmin || isTest || effectivePlan !== "expired";
   const leadsUsed     = leadsCount;
   const leadsMax      = planCfg.leadsMax;
-  const atLimit       = !isAdmin && leadsMax !== Infinity && leadsUsed >= leadsMax;
+  const atLimit       = !isAdmin && !isTest && leadsMax !== Infinity && leadsUsed >= leadsMax;
 
   // ── Job Search plan gating ────────────────────────────────────────────────
   const JOB_LIMITS_BY_PLAN: Record<string,number> = {
@@ -217,9 +218,9 @@ export default function LeadSearchPage() {
     business: Infinity,
   };
   const TRIAL_JOB_LIMIT    = 20;
-  const canUseJobSearch    = isAdmin || ["trial","starter","pro","business"].includes(effectivePlan) && effectivePlan !== "free" && effectivePlan !== "expired";
-  const isJobSearchLimited = !isAdmin && ["trial","starter","pro"].includes(effectivePlan);
-  const jobLimit           = isAdmin ? Infinity : (JOB_LIMITS_BY_PLAN[effectivePlan] ?? 0);
+  const canUseJobSearch    = isAdmin || isTest || ["trial","starter","pro","business"].includes(effectivePlan) && effectivePlan !== "free" && effectivePlan !== "expired";
+  const isJobSearchLimited = !isAdmin && !isTest && ["trial","starter","pro"].includes(effectivePlan);
+  const jobLimit           = (isAdmin || isTest) ? Infinity : (JOB_LIMITS_BY_PLAN[effectivePlan] ?? 0);
   const derivedLimitReached = isJobSearchLimited && jobLimit !== Infinity && jobResultsUsed >= jobLimit;
 
   // ── Lead Search ───────────────────────────────────────────────────────────
@@ -330,7 +331,7 @@ export default function LeadSearchPage() {
         body: JSON.stringify({
           prompt: jobPrompt,
           email,
-          plan: isAdmin ? "admin" : effectivePlan,
+          plan: (isAdmin || isTest) ? "admin" : effectivePlan,
           numResults: numJobResults,
         }),
       });

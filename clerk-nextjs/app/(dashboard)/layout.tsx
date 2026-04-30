@@ -116,9 +116,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push("/");
   };
 
-  const effectivePlan = dbUser?.effectivePlan || "free";
-  const planCfg = PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free;
   const isAdmin = dbUser?.role === "admin";
+  const isTest  = dbUser?.role === "test";
+  const effectivePlan = dbUser?.effectivePlan || "free";
+  const planCfg = (isAdmin || isTest) ? PLAN_CONFIG.business : (PLAN_CONFIG[effectivePlan] || PLAN_CONFIG.free);
 
   return (
     <>
