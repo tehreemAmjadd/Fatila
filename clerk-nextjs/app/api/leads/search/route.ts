@@ -479,15 +479,7 @@ export async function POST(req: NextRequest) {
       if (unseen.length > 0) {
         const toReturn = unseen.slice(0, resultsLimit);
         console.log(`Cache hit: returning ${toReturn.length}`);
-        // Fetch user's monthly lead count from DB
-        let leadsUsedThisMonth = 0;
-        if (userEmail) {
-          try {
-            const userData = await db.user.findUnique({ where: { email: userEmail }, select: { leadsUsedThisMonth: true, leadsUsed: true } }).catch(() => null);
-            leadsUsedThisMonth = Number(userData?.leadsUsedThisMonth ?? userData?.leadsUsed ?? 0);
-          } catch {}
-        }
-        return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: pool.length, remainingUnseen: unseen.length - toReturn.length, leadsUsed: leadsUsedThisMonth, leadsUsedThisMonth });
+        return NextResponse.json({ leads: toReturn, total: toReturn.length, totalInPool: pool.length, remainingUnseen: unseen.length - toReturn.length });
       }
       return NextResponse.json({ leads: [], total: 0, totalInPool: pool.length, exhausted: true, message: "All leads seen. Try a different keyword or location." });
     }
@@ -516,20 +508,9 @@ export async function POST(req: NextRequest) {
     const unseen   = allLeads.filter(l => !excludeSet.has(l.placeId));
     const toReturn = unseen.slice(0, resultsLimit);
 
-    // Fetch user's monthly lead count from DB to send back to frontend
-    let leadsUsedThisMonth = 0;
-    if (userEmail) {
-      try {
-        const userData = await db.user.findUnique({ where: { email: userEmail }, select: { leadsUsedThisMonth: true, leadsUsed: true } }).catch(() => null);
-        leadsUsedThisMonth = Number(userData?.leadsUsedThisMonth ?? userData?.leadsUsed ?? 0);
-      } catch {}
-    }
-
     return NextResponse.json({
       leads: toReturn, total: toReturn.length,
       totalInPool: allLeads.length, remainingUnseen: unseen.length - toReturn.length,
-      leadsUsed: leadsUsedThisMonth,
-      leadsUsedThisMonth,
     });
 
   } catch (error: any) {

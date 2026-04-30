@@ -161,7 +161,10 @@ export default function LeadSearchPage() {
 
   // Plan
   const [dbUser,     setDbUser]     = useState<any>(null);
-  const [leadsCount, setLeadsCount] = useState<number>(0);
+  // leadsCount: sessionStorage se persist hota hai taake page reload pe reset na ho
+  const [leadsCount, setLeadsCount] = useState<number>(() => {
+    try { return Number(sessionStorage.getItem("leadsUsedSession") || 0); } catch { return 0; }
+  });
   const email = user?.primaryEmailAddress?.emailAddress;
 
   // ── Restore session on mount ──────────────────────────────────────────────
@@ -187,8 +190,7 @@ export default function LeadSearchPage() {
       const uData = await uRes.json();
       const sData = await sRes.json();
       setDbUser(uData);
-      // leadsUsedThisMonth = current month search count (not total saved leads)
-      const raw = uData?.leadsUsedThisMonth ?? uData?.monthlyLeads ?? uData?.leadsUsed ?? sData?.leadsUsedThisMonth ?? sData?.monthlyLeads ?? 0;
+      const raw = sData?.totalLeads ?? uData?.totalLeads ?? uData?.leadsUsed ?? 0;
       const count = typeof raw === "number" ? raw
                   : Array.isArray(raw)       ? raw.length
                   : Number(raw) || 0;
@@ -265,14 +267,7 @@ export default function LeadSearchPage() {
       // Agar pool mein aur bhi hain toh "Load More" dikhao
       setHasMore((data.remainingUnseen ?? 0) > 0);
 
-      // fetchUser se fresh count lo (API se monthly leads used)
       await fetchUser();
-      // Agar API sahi count nahi deta toh results count se override karo
-      if (data.leadsUsed !== undefined) {
-        setLeadsCount(Number(data.leadsUsed) || 0);
-      } else if (data.leadsUsedThisMonth !== undefined) {
-        setLeadsCount(Number(data.leadsUsedThisMonth) || 0);
-      }
     } catch(err) {
       console.error(err);
       setResults([]);
@@ -316,6 +311,13 @@ export default function LeadSearchPage() {
       }
 
       setHasMore((data.remainingUnseen ?? 0) > 0);
+
+      // Load More ke results bhi count mein add karo
+      setLeadsCount(prev => {
+        const newCount = prev + newLeads.length;
+        try { sessionStorage.setItem("leadsUsedSession", String(newCount)); } catch {}
+        return newCount;
+      });
     } catch(err) {
       console.error(err);
     } finally {
