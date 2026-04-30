@@ -187,7 +187,8 @@ export default function LeadSearchPage() {
       const uData = await uRes.json();
       const sData = await sRes.json();
       setDbUser(uData);
-      const raw = sData?.totalLeads ?? uData?.totalLeads ?? uData?.leadsUsed ?? 0;
+      // leadsUsedThisMonth = current month search count (not total saved leads)
+      const raw = uData?.leadsUsedThisMonth ?? uData?.monthlyLeads ?? uData?.leadsUsed ?? sData?.leadsUsedThisMonth ?? sData?.monthlyLeads ?? 0;
       const count = typeof raw === "number" ? raw
                   : Array.isArray(raw)       ? raw.length
                   : Number(raw) || 0;
@@ -264,7 +265,14 @@ export default function LeadSearchPage() {
       // Agar pool mein aur bhi hain toh "Load More" dikhao
       setHasMore((data.remainingUnseen ?? 0) > 0);
 
+      // fetchUser se fresh count lo (API se monthly leads used)
       await fetchUser();
+      // Agar API sahi count nahi deta toh results count se override karo
+      if (data.leadsUsed !== undefined) {
+        setLeadsCount(Number(data.leadsUsed) || 0);
+      } else if (data.leadsUsedThisMonth !== undefined) {
+        setLeadsCount(Number(data.leadsUsedThisMonth) || 0);
+      }
     } catch(err) {
       console.error(err);
       setResults([]);
