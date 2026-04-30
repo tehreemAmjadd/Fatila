@@ -33,20 +33,41 @@ const QUICK_PROMPTS = [
   { label:"PCB & electronics jobs KSA",            text:"Find latest PCB repair and electronics engineering jobs in Saudi Arabia", icon:"trend" },
 ];
 
-// ─── Custom Markdown link renderer ───────────────────────────────────────────
+// ─── Custom Markdown renderers ────────────────────────────────────────────────
 const MarkdownComponents = {
   a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="md-link"
-    >
+    <a href={href} target="_blank" rel="noopener noreferrer" className="md-link">
       🔗 {children}
     </a>
   ),
   p: ({ children }: { children?: React.ReactNode }) => (
     <p style={{ margin: "5px 0" }}>{children}</p>
+  ),
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div style={{ overflowX: "auto", margin: "12px 0" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "600px" }}>
+        {children}
+      </table>
+    </div>
+  ),
+  thead: ({ children }: { children?: React.ReactNode }) => (
+    <thead style={{ background: "rgba(0,255,153,0.12)" }}>{children}</thead>
+  ),
+  tbody: ({ children }: { children?: React.ReactNode }) => (
+    <tbody>{children}</tbody>
+  ),
+  tr: ({ children }: { children?: React.ReactNode }) => (
+    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>{children}</tr>
+  ),
+  th: ({ children }: { children?: React.ReactNode }) => (
+    <th style={{ padding: "8px 12px", textAlign: "left", color: "#00ff99", fontWeight: 600, border: "1px solid rgba(0,255,153,0.2)", whiteSpace: "nowrap" }}>
+      {children}
+    </th>
+  ),
+  td: ({ children }: { children?: React.ReactNode }) => (
+    <td style={{ padding: "8px 12px", border: "1px solid rgba(255,255,255,0.08)", color: "#e0e8f0", verticalAlign: "top", lineHeight: 1.5 }}>
+      {children}
+    </td>
   ),
 };
 
