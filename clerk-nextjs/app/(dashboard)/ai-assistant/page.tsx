@@ -44,8 +44,8 @@ const MarkdownComponents = {
     <p style={{ margin: "5px 0" }}>{children}</p>
   ),
   table: ({ children }: { children?: React.ReactNode }) => (
-    <div style={{ overflowX: "auto", margin: "12px 0" }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", minWidth: "600px" }}>
+    <div style={{ overflowX: "auto", margin: "12px 0", width: "100%", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px", tableLayout: "auto" }}>
         {children}
       </table>
     </div>
@@ -65,7 +65,7 @@ const MarkdownComponents = {
     </th>
   ),
   td: ({ children }: { children?: React.ReactNode }) => (
-    <td style={{ padding: "8px 12px", border: "1px solid rgba(255,255,255,0.08)", color: "#e0e8f0", verticalAlign: "top", lineHeight: 1.5 }}>
+    <td style={{ padding: "8px 12px", border: "1px solid rgba(255,255,255,0.08)", color: "#e0e8f0", verticalAlign: "top", lineHeight: 1.5, minWidth: "80px" }}>
       {children}
     </td>
   ),
@@ -351,9 +351,10 @@ export default function ProjectHuntPage() {
         .msg-body :global(strong){color:#fff;}
 
         /* Table styles for sector intelligence reports */
-        .msg-body :global(table){width:100%;border-collapse:collapse;margin:10px 0;font-size:13px;overflow-x:auto;display:block;}
-        .msg-body :global(th){background:rgba(0,255,153,.12);color:#00ff99;padding:8px 10px;text-align:left;border:1px solid rgba(0,255,153,.2);font-weight:600;white-space:nowrap;}
-        .msg-body :global(td){padding:8px 10px;border:1px solid rgba(255,255,255,.08);color:#e0e8f0;vertical-align:top;line-height:1.5;}
+        .msg-body :global(.table-wrap){width:100%;overflow-x:auto;margin:10px 0;-webkit-overflow-scrolling:touch;}
+        .msg-body :global(table){width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;}
+        .msg-body :global(th){background:rgba(0,255,153,.12);color:#00ff99;padding:8px 12px;text-align:left;border:1px solid rgba(0,255,153,.2);font-weight:600;white-space:nowrap;}
+        .msg-body :global(td){padding:8px 12px;border:1px solid rgba(255,255,255,.08);color:#e0e8f0;vertical-align:top;line-height:1.5;min-width:80px;}
         .msg-body :global(tr:nth-child(even) td){background:rgba(255,255,255,.02);}
         .msg-body :global(tr:hover td){background:rgba(0,255,153,.04);}
         .msg-body :global(hr){border:none;border-top:1px solid rgba(255,255,255,.08);margin:14px 0;}
